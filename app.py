@@ -118,6 +118,14 @@ def to_num(series):
         return pd.to_numeric(s, errors="coerce").fillna(0)
     return 0
 
+def safe_div(a, b):
+    """安全除法，避免除以0或NA"""
+    try:
+        result = a / b.where(b != 0, other=pd.NA)
+        return pd.to_numeric(result, errors="coerce").fillna(0)
+    except Exception:
+        return pd.Series([0] * len(a))
+
 def make_chart(fig):
     fig.update_layout(**PLOTLY_LAYOUT)
     return fig
@@ -128,27 +136,32 @@ def clean_df():
     df = read_sheet()
     if df.empty:
         return pd.DataFrame()
-    # 数值列转换
     num_cols = [c for c in df.columns if c not in ["城市", "年份", "月份"]]
     for col in num_cols:
         df[col] = to_num(df[col])
-    # 过滤有效城市
     if "城市" in df.columns:
         df = df[df["城市"].isin(CITIES)].copy()
-    # 年份统一为字符串
     if "年份" in df.columns:
         df["年份"] = df["年份"].astype(str).str.strip().str.replace(".0", "", regex=False)
     if "月份" in df.columns:
         df["月份"] = df["月份"].astype(str).str.strip()
-    # 计算派生指标
+    # 派生指标
     if "客资总数" in df.columns and "到店总量" in df.columns:
-        df["到店率"] = (df["到店总量"] / df["客资总数"].replace(0, pd.NA) * 100).round(2)
+        mask = df["客资总数"] > 0
+        df["到店率"] = 0.0
+        df.loc[mask, "到店率"] = (df.loc[mask, "到店总量"] / df.loc[mask, "客资总数"] * 100).round(2)
     if "总花费" in df.columns and "客资总数" in df.columns:
-        df["客资成本"] = (df["总花费"] / df["客资总数"].replace(0, pd.NA)).round(2)
+        mask = df["客资总数"] > 0
+        df["客资成本"] = 0.0
+        df.loc[mask, "客资成本"] = (df.loc[mask, "总花费"] / df.loc[mask, "客资总数"]).round(2)
     if "总花费" in df.columns and "收销总量/台" in df.columns:
-        df["成交成本"] = (df["总花费"] / df["收销总量/台"].replace(0, pd.NA)).round(2)
+        mask = df["收销总量/台"] > 0
+        df["成交成本"] = 0.0
+        df.loc[mask, "成交成本"] = (df.loc[mask, "总花费"] / df.loc[mask, "收销总量/台"]).round(2)
     if "收销总量/台" in df.columns and "客资总数" in df.columns:
-        df["成交率"] = (df["收销总量/台"] / df["客资总数"].replace(0, pd.NA) * 100).round(2)
+        mask = df["客资总数"] > 0
+        df["成交率"] = 0.0
+        df.loc[mask, "成交率"] = (df.loc[mask, "收销总量/台"] / df.loc[mask, "客资总数"] * 100).round(2)
     return df
 
 def apply_filter(df, cities, years, month):
@@ -160,6 +173,27 @@ def apply_filter(df, cities, years, month):
     if month != "全部月份" and "月份" in d.columns:
         d = d[d["月份"] == month]
     return d
+
+def safe_agg(df, group_col, agg_dict):
+    """聚合后安全计算派生指标"""
+    g = df.groupby(group_col).agg(**agg_dict).reset_index()
+    if "总花费" in g.columns and "客资总数" in g.columns:
+        mask = g["客资总数"] > 0
+        g["客资成本"] = 0.0
+        g.loc[mask, "客资成本"] = (g.loc[mask, "总花费"] / g.loc[mask, "客资总数"]).round(2)
+    if "总花费" in g.columns and "收销总量" in g.columns:
+        mask = g["收销总量"] > 0
+        g["成交成本"] = 0.0
+        g.loc[mask, "成交成本"] = (g.loc[mask, "总花费"] / g.loc[mask, "收销总量"]).round(2)
+    if "到店总量" in g.columns and "客资总数" in g.columns:
+        mask = g["客资总数"] > 0
+        g["到店率%"] = 0.0
+        g.loc[mask, "到店率%"] = (g.loc[mask, "到店总量"] / g.loc[mask, "客资总数"] * 100).round(2)
+    if "收销总量" in g.columns and "客资总数" in g.columns:
+        mask = g["客资总数"] > 0
+        g["成交率%"] = 0.0
+        g.loc[mask, "成交率%"] = (g.loc[mask, "收销总量"] / g.loc[mask, "客资总数"] * 100).round(2)
+    return g
 
 # ── 加载数据 ──
 with st.spinner("正在加载数据..."):
@@ -195,15 +229,15 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ── 核心指标 ──
-total_spend   = df_filtered["总花费"].sum() if "总花费" in df_filtered.columns else 0
-total_keizi   = df_filtered["客资总数"].sum() if "客资总数" in df_filtered.columns else 0
-total_daodian = df_filtered["到店总量"].sum() if "到店总量" in df_filtered.columns else 0
-total_chengjiao = df_filtered["收销总量/台"].sum() if "收销总量/台" in df_filtered.columns else 0
-total_xiaoshou  = df_filtered["销售量/台"].sum() if "销售量/台" in df_filtered.columns else 0
-total_shougou   = df_filtered["收购量/台"].sum() if "收购量/台" in df_filtered.columns else 0
-keizi_cost    = total_spend / total_keizi if total_keizi > 0 else 0
+total_spend    = df_filtered["总花费"].sum() if "总花费" in df_filtered.columns else 0
+total_keizi    = df_filtered["客资总数"].sum() if "客资总数" in df_filtered.columns else 0
+total_daodian  = df_filtered["到店总量"].sum() if "到店总量" in df_filtered.columns else 0
+total_chengjiao= df_filtered["收销总量/台"].sum() if "收销总量/台" in df_filtered.columns else 0
+total_xiaoshou = df_filtered["销售量/台"].sum() if "销售量/台" in df_filtered.columns else 0
+total_shougou  = df_filtered["收购量/台"].sum() if "收购量/台" in df_filtered.columns else 0
+keizi_cost     = total_spend / total_keizi if total_keizi > 0 else 0
 chengjiao_cost = total_spend / total_chengjiao if total_chengjiao > 0 else 0
-daodian_rate  = total_daodian / total_keizi * 100 if total_keizi > 0 else 0
+daodian_rate   = total_daodian / total_keizi * 100 if total_keizi > 0 else 0
 chengjiao_rate = total_chengjiao / total_keizi * 100 if total_keizi > 0 else 0
 
 c1,c2,c3,c4 = st.columns(4)
@@ -230,18 +264,14 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 with tab1:
     st.subheader("分城市经营对比")
     if not df_filtered.empty and "城市" in df_filtered.columns:
-        cg = df_filtered.groupby("城市").agg(
-            总花费=("总花费","sum"),
-            客资总数=("客资总数","sum"),
-            到店总量=("到店总量","sum"),
-            收销总量=("收销总量/台","sum"),
-            销售量=("销售量/台","sum"),
-            收购量=("收购量/台","sum"),
-        ).reset_index()
-        cg["客资成本"] = (cg["总花费"] / cg["客资总数"].replace(0,pd.NA)).round(2)
-        cg["成交成本"] = (cg["总花费"] / cg["收销总量"].replace(0,pd.NA)).round(2)
-        cg["到店率%"] = (cg["到店总量"] / cg["客资总数"].replace(0,pd.NA) * 100).round(2)
-        cg["成交率%"] = (cg["收销总量"] / cg["客资总数"].replace(0,pd.NA) * 100).round(2)
+        cg = safe_agg(df_filtered, "城市", {
+            "总花费": ("总花费","sum"),
+            "客资总数": ("客资总数","sum"),
+            "到店总量": ("到店总量","sum"),
+            "收销总量": ("收销总量/台","sum"),
+            "销售量": ("销售量/台","sum"),
+            "收购量": ("收购量/台","sum"),
+        })
         st.dataframe(cg, use_container_width=True, hide_index=True)
         ca,cb = st.columns(2)
         with ca:
@@ -268,19 +298,14 @@ with tab1:
 # ── Tab2: 年度对比 ──
 with tab2:
     st.subheader("年度数据对比")
-    if not df.empty and "年份" in df.columns:
-        # 用全量数据按年份聚合（不受月份筛选影响，但受城市影响）
-        df_year = apply_filter(df, sel_cities, sel_years, "全部月份")
-        yg = df_year.groupby("年份").agg(
-            总花费=("总花费","sum"),
-            客资总数=("客资总数","sum"),
-            到店总量=("到店总量","sum"),
-            收销总量=("收销总量/台","sum"),
-        ).reset_index()
-        yg["客资成本"] = (yg["总花费"] / yg["客资总数"].replace(0,pd.NA)).round(2)
-        yg["成交成本"] = (yg["总花费"] / yg["收销总量"].replace(0,pd.NA)).round(2)
-        yg["到店率%"] = (yg["到店总量"] / yg["客资总数"].replace(0,pd.NA) * 100).round(2)
-        yg["成交率%"] = (yg["收销总量"] / yg["客资总数"].replace(0,pd.NA) * 100).round(2)
+    df_year = apply_filter(df, sel_cities, sel_years, "全部月份")
+    if not df_year.empty and "年份" in df_year.columns:
+        yg = safe_agg(df_year, "年份", {
+            "总花费": ("总花费","sum"),
+            "客资总数": ("客资总数","sum"),
+            "到店总量": ("到店总量","sum"),
+            "收销总量": ("收销总量/台","sum"),
+        })
         yg["年份"] = pd.Categorical(yg["年份"], categories=YEARS, ordered=True)
         yg = yg.sort_values("年份")
         st.dataframe(yg, use_container_width=True, hide_index=True)
@@ -311,30 +336,23 @@ with tab3:
     st.subheader("月度趋势分析")
     df_trend = apply_filter(df, sel_cities, sel_years, "全部月份")
     if not df_trend.empty and "月份" in df_trend.columns:
-        # 按年份+月份聚合
-        tm = df_trend.groupby(["年份","月份"]).agg(
-            客资总数=("客资总数","sum"),
-            到店总量=("到店总量","sum"),
-            收销总量=("收销总量/台","sum"),
-            总花费=("总花费","sum"),
-        ).reset_index()
-        tm["客资成本"] = (tm["总花费"] / tm["客资总数"].replace(0,pd.NA)).round(2)
-        tm["到店率%"] = (tm["到店总量"] / tm["客资总数"].replace(0,pd.NA) * 100).round(2)
+        tm = safe_agg(df_trend, ["年份","月份"], {
+            "客资总数": ("客资总数","sum"),
+            "到店总量": ("到店总量","sum"),
+            "收销总量": ("收销总量/台","sum"),
+            "总花费": ("总花费","sum"),
+        })
         tm["月份"] = pd.Categorical(tm["月份"], categories=MONTHS, ordered=True)
         tm = tm.sort_values(["年份","月份"])
-
         fig = px.line(tm,x="月份",y="客资总数",color="年份",title="各年度客资量月度趋势",
                       markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig),use_container_width=True)
-
         fig2 = px.line(tm,x="月份",y="收销总量",color="年份",title="各年度成交量月度趋势",
                        markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig2),use_container_width=True)
-
         fig3 = px.line(tm,x="月份",y="到店率%",color="年份",title="各年度到店率月度趋势",
                        markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig3),use_container_width=True)
-
         fig4 = px.line(tm,x="月份",y="客资成本",color="年份",title="各年度客资成本月度趋势",
                        markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig4),use_container_width=True)
@@ -351,7 +369,7 @@ with tab4:
     }
     available_spend = {k:v for k,v in spend_cols.items() if v in df_filtered.columns}
     if available_spend:
-        spend_data = {k: df_filtered[v].sum() for k,v in available_spend.items()}
+        spend_data = {k: float(df_filtered[v].sum()) for k,v in available_spend.items()}
         spend_df = pd.DataFrame({"渠道": list(spend_data.keys()), "花费": list(spend_data.values())})
         spend_df = spend_df[spend_df["花费"] > 0]
         if not spend_df.empty:
@@ -365,8 +383,6 @@ with tab4:
                 fig = px.bar(spend_df,x="渠道",y="花费",title="各渠道花费对比",
                              color="渠道",color_discrete_sequence=COLORS)
                 st.plotly_chart(make_chart(fig),use_container_width=True)
-
-    # 按年份看花费趋势
     df_spend_trend = apply_filter(df, sel_cities, sel_years, "全部月份")
     if not df_spend_trend.empty and "年份" in df_spend_trend.columns:
         sg = df_spend_trend.groupby("年份").agg(总花费=("总花费","sum")).reset_index()
@@ -380,7 +396,6 @@ with tab4:
 with tab5:
     st.subheader("数据明细")
     st.dataframe(df_filtered.dropna(axis=1, how='all'), use_container_width=True)
-    # 导出Excel
     buf = BytesIO()
     df_filtered.to_excel(buf, index=False, engine='xlsxwriter')
     buf.seek(0)
