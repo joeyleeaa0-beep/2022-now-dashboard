@@ -185,8 +185,13 @@ def clean_df():
     有效到店列 = [c for c in 到店列 if c in df.columns]
     if 有效到店列:
         df["到店总量"] = df[有效到店列].sum(axis=1)
+    # 收销总量 = 销售量 + 收购量，如果都是0则用视频成交+直播成交补充
     if "销售量" in df.columns and "收购量" in df.columns:
         df["收销总量"] = df["销售量"] + df["收购量"]
+    # 视频成交和直播成交作为补充（主要用于2022年早期数据）
+    if "视频成交" in df.columns and "直播成交" in df.columns:
+        mask = df["收销总量"] == 0
+        df.loc[mask, "收销总量"] = df.loc[mask, "视频成交"] + df.loc[mask, "直播成交"]
     if "城市" in df.columns:
         df = df[df["城市"].isin(CITIES)].copy()
         df["城市"] = pd.Categorical(df["城市"], categories=CITIES, ordered=True)
