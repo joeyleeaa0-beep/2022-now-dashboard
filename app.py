@@ -16,21 +16,30 @@ st.markdown("""
     .stApp { background-color: #f8f9fc; }
     #MainMenu, footer, header { visibility: hidden; }
     [data-testid="metric-container"] {
-        background: white;
+        background: white !important;
         border: 1px solid #eef0f4;
         border-radius: 12px;
         padding: 20px 24px;
         box-shadow: 0 1px 4px rgba(0,0,0,0.05);
     }
-    [data-testid="metric-container"] label { color: #6b7280 !important; font-size: 13px !important; font-weight: 500 !important; }
-    [data-testid="metric-container"] [data-testid="stMetricValue"] { color: #111827 !important; font-size: 26px !important; font-weight: 700 !important; }
-    [data-testid="metric-container"] [data-testid="stMetricDelta"] { color: #111827 !important; }
+    [data-testid="metric-container"] * {
+        color: #111827 !important;
+    }
+    [data-testid="metric-container"] label {
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        color: #6b7280 !important;
+    }
+    [data-testid="metric-container"] [data-testid="stMetricValue"] {
+        font-size: 26px !important;
+        font-weight: 700 !important;
+        color: #111827 !important;
+    }
     .stTabs [data-baseweb="tab-list"] { gap: 8px; background: transparent; border-bottom: 1px solid #eef0f4; }
     .stTabs [data-baseweb="tab"] { background: transparent; color: #6b7280; font-weight: 500; border-radius: 6px 6px 0 0; padding: 8px 18px; }
     .stTabs [aria-selected="true"] { background: white !important; color: #111827 !important; border-bottom: 2px solid #4f46e5 !important; }
     [data-testid="stSidebar"] { background: white; border-right: 1px solid #eef0f4; }
     hr { border-color: #eef0f4; }
-    div[data-testid="metric-container"] > div { color: #111827 !important; }
 </style>
 """, unsafe_allow_html=True)
 
