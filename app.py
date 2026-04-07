@@ -15,26 +15,6 @@ st.markdown("""
 <style>
     .stApp { background-color: #f8f9fc; }
     #MainMenu, footer { visibility: hidden; }
-    [data-testid="metric-container"] {
-        background: white !important;
-        border: 1px solid #eef0f4;
-        border-radius: 12px;
-        padding: 20px 24px;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-    }
-    [data-testid="metric-container"] * {
-        color: #111827 !important;
-    }
-    [data-testid="metric-container"] label {
-        font-size: 13px !important;
-        font-weight: 500 !important;
-        color: #6b7280 !important;
-    }
-    [data-testid="metric-container"] [data-testid="stMetricValue"] {
-        font-size: 26px !important;
-        font-weight: 700 !important;
-        color: #111827 !important;
-    }
     .stTabs [data-baseweb="tab-list"] { gap: 8px; background: transparent; border-bottom: 1px solid #eef0f4; }
     .stTabs [data-baseweb="tab"] { background: transparent; color: #6b7280; font-weight: 500; border-radius: 6px 6px 0 0; padding: 8px 18px; }
     .stTabs [aria-selected="true"] { background: white !important; color: #111827 !important; border-bottom: 2px solid #4f46e5 !important; }
@@ -110,7 +90,6 @@ def extract_value(val):
     if isinstance(val, list):
         return extract_text(val)
     s = str(val).strip()
-    # 公式文本直接返回0
     if "(" in s and ")" in s and any(c.isalpha() for c in s[:5]):
         return 0
     if "+" in s and s[0].isalpha():
@@ -176,8 +155,6 @@ def clean_df():
     df = read_sheet()
     if df.empty:
         return pd.DataFrame()
-
-    # 重命名列
     rename_map = {
         "收销总量/台": "收销总量原始",
         "销售量/台": "销售量",
@@ -186,52 +163,36 @@ def clean_df():
         "直播成交/台": "直播成交",
     }
     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
-
-    # 年份月份清洗
     if "年份" in df.columns:
         df["年份"] = df["年份"].astype(str).str.strip().str.replace(".0", "", regex=False)
     if "月份" in df.columns:
         df["月份"] = df["月份"].astype(str).str.strip()
         df["月份"] = df["月份"].apply(lambda x: x + "月" if x.isdigit() else x)
-
-    # 所有非文字列转数值
     skip_cols = ["城市", "年份", "月份"]
     for col in df.columns:
         if col not in skip_cols:
             df[col] = to_num(df[col])
-
-    # ── 公式列全部用子列加总重新计算 ──
-    # 总花费
     花费列 = ["抖音账号花费", "信息花费", "微信花费", "小红书花费", "其他平台花费"]
     有效花费列 = [c for c in 花费列 if c in df.columns]
     if 有效花费列:
         df["总花费"] = df[有效花费列].sum(axis=1)
-
-    # 客资总数
     客资列 = ["直播客资数", "视频客资数", "抖音号客资", "信息流客资数",
               "微信客资客资", "小红书客资客资", "b站客资", "快手客资"]
     有效客资列 = [c for c in 客资列 if c in df.columns]
     if 有效客资列:
         df["客资总数"] = df[有效客资列].sum(axis=1)
-
-    # 到店总量
     到店列 = ["销售到店", "收购到店"]
     有效到店列 = [c for c in 到店列 if c in df.columns]
     if 有效到店列:
         df["到店总量"] = df[有效到店列].sum(axis=1)
-
-    # 收销总量
     if "销售量" in df.columns and "收购量" in df.columns:
         df["收销总量"] = df["销售量"] + df["收购量"]
-
-    # 过滤有效城市和年份
     if "城市" in df.columns:
         df = df[df["城市"].isin(CITIES)].copy()
         df["城市"] = pd.Categorical(df["城市"], categories=CITIES, ordered=True)
         df = df.sort_values("城市")
     if "年份" in df.columns:
         df = df[df["年份"].isin(YEARS)].copy()
-
     return df
 
 def apply_filter(df, cities, years, month):
@@ -244,7 +205,13 @@ def apply_filter(df, cities, years, month):
         d = d[d["月份"] == month]
     return d
 
-# ── 加载数据 ──
+def metric_html(label, value):
+    return f"""<div style="background:white;border:1px solid #eef0f4;border-radius:12px;
+        padding:20px 24px;box-shadow:0 1px 4px rgba(0,0,0,0.05);margin-bottom:8px;">
+        <div style="color:#6b7280;font-size:13px;font-weight:500;margin-bottom:6px;">{label}</div>
+        <div style="color:#111827;font-size:26px;font-weight:700;line-height:1.2;">{value}</div>
+    </div>"""
+
 with st.spinner("正在加载数据..."):
     try:
         df = clean_df()
@@ -255,7 +222,6 @@ with st.spinner("正在加载数据..."):
         st.error(f"加载失败：{e}")
         st.stop()
 
-# ── 侧边栏 ──
 with st.sidebar:
     st.markdown("## 筛选条件")
     sel_cities = st.multiselect("城市（可多选）", CITIES, default=CITIES)
@@ -265,7 +231,6 @@ with st.sidebar:
     df_filtered = apply_filter(df, sel_cities, sel_years, sel_month)
     st.caption(f"当前数据：{len(df_filtered)} 条")
 
-# ── 页面标题 ──
 st.markdown(f"""
 <div style="padding:8px 0 20px 0;border-bottom:1px solid #eef0f4;margin-bottom:24px;">
     <h2 style="margin:0;color:#111827;font-weight:700;">📊 新媒体年度数据看板</h2>
@@ -277,7 +242,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ── 核心指标 ──
 total_spend     = df_filtered["总花费"].sum() if "总花费" in df_filtered.columns else 0
 total_keizi     = df_filtered["客资总数"].sum() if "客资总数" in df_filtered.columns else 0
 total_daodian   = df_filtered["到店总量"].sum() if "到店总量" in df_filtered.columns else 0
@@ -289,27 +253,19 @@ chengjiao_cost  = total_spend / total_chengjiao if total_chengjiao > 0 else 0
 daodian_rate    = total_daodian / total_keizi * 100 if total_keizi > 0 else 0
 chengjiao_rate  = total_chengjiao / total_keizi * 100 if total_keizi > 0 else 0
 
-def metric_card(label, value):
-    return f"""
-    <div style="background:white;border:1px solid #eef0f4;border-radius:12px;
-                padding:20px 24px;box-shadow:0 1px 4px rgba(0,0,0,0.05);">
-        <div style="color:#6b7280;font-size:13px;font-weight:500;margin-bottom:8px;">{label}</div>
-        <div style="color:#111827;font-size:24px;font-weight:700;">{value}</div>
-    </div>"""
-
-col1,col2,col3,col4 = st.columns(4)
-col1.markdown(metric_card("总花费", f"¥{total_spend:,.0f}"), unsafe_allow_html=True)
-col2.markdown(metric_card("总客资量", f"{int(total_keizi):,}"), unsafe_allow_html=True)
-col3.markdown(metric_card("到店总量", f"{int(total_daodian):,}"), unsafe_allow_html=True)
-col4.markdown(metric_card("总成交量", f"{int(total_chengjiao):,}"), unsafe_allow_html=True)
-col5,col6,col7,col8 = st.columns(4)
-col5.markdown(metric_card("销售量", f"{int(total_xiaoshou):,}"), unsafe_allow_html=True)
-col6.markdown(metric_card("收购量", f"{int(total_shougou):,}"), unsafe_allow_html=True)
-col7.markdown(metric_card("客资成本", f"¥{keizi_cost:.2f}"), unsafe_allow_html=True)
-col8.markdown(metric_card("成交成本", f"¥{chengjiao_cost:.2f}"), unsafe_allow_html=True)
-col9,col10,_,_ = st.columns(4)
-col9.markdown(metric_card("到店率", f"{daodian_rate:.2f}%"), unsafe_allow_html=True)
-col10.markdown(metric_card("成交率", f"{chengjiao_rate:.2f}%"), unsafe_allow_html=True)
+c1,c2,c3,c4 = st.columns(4)
+c1.markdown(metric_html("总花费", f"¥{total_spend:,.0f}"), unsafe_allow_html=True)
+c2.markdown(metric_html("总客资量", f"{int(total_keizi):,}"), unsafe_allow_html=True)
+c3.markdown(metric_html("到店总量", f"{int(total_daodian):,}"), unsafe_allow_html=True)
+c4.markdown(metric_html("总成交量", f"{int(total_chengjiao):,}"), unsafe_allow_html=True)
+c5,c6,c7,c8 = st.columns(4)
+c5.markdown(metric_html("销售量", f"{int(total_xiaoshou):,}"), unsafe_allow_html=True)
+c6.markdown(metric_html("收购量", f"{int(total_shougou):,}"), unsafe_allow_html=True)
+c7.markdown(metric_html("客资成本", f"¥{keizi_cost:.2f}"), unsafe_allow_html=True)
+c8.markdown(metric_html("成交成本", f"¥{chengjiao_cost:.2f}"), unsafe_allow_html=True)
+c9,c10,_,_ = st.columns(4)
+c9.markdown(metric_html("到店率", f"{daodian_rate:.2f}%"), unsafe_allow_html=True)
+c10.markdown(metric_html("成交率", f"{chengjiao_rate:.2f}%"), unsafe_allow_html=True)
 
 st.divider()
 
