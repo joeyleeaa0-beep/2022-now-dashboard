@@ -289,19 +289,27 @@ chengjiao_cost  = total_spend / total_chengjiao if total_chengjiao > 0 else 0
 daodian_rate    = total_daodian / total_keizi * 100 if total_keizi > 0 else 0
 chengjiao_rate  = total_chengjiao / total_keizi * 100 if total_keizi > 0 else 0
 
+def metric_card(label, value):
+    return f"""
+    <div style="background:white;border:1px solid #eef0f4;border-radius:12px;
+                padding:20px 24px;box-shadow:0 1px 4px rgba(0,0,0,0.05);">
+        <div style="color:#6b7280;font-size:13px;font-weight:500;margin-bottom:8px;">{label}</div>
+        <div style="color:#111827;font-size:24px;font-weight:700;">{value}</div>
+    </div>"""
+
 col1,col2,col3,col4 = st.columns(4)
-col1.metric("总花费", f"¥{total_spend:,.0f}")
-col2.metric("总客资量", f"{int(total_keizi):,}")
-col3.metric("到店总量", f"{int(total_daodian):,}")
-col4.metric("总成交量", f"{int(total_chengjiao):,}")
+col1.markdown(metric_card("总花费", f"¥{total_spend:,.0f}"), unsafe_allow_html=True)
+col2.markdown(metric_card("总客资量", f"{int(total_keizi):,}"), unsafe_allow_html=True)
+col3.markdown(metric_card("到店总量", f"{int(total_daodian):,}"), unsafe_allow_html=True)
+col4.markdown(metric_card("总成交量", f"{int(total_chengjiao):,}"), unsafe_allow_html=True)
 col5,col6,col7,col8 = st.columns(4)
-col5.metric("销售量", f"{int(total_xiaoshou):,}")
-col6.metric("收购量", f"{int(total_shougou):,}")
-col7.metric("客资成本", f"¥{keizi_cost:.2f}")
-col8.metric("成交成本", f"¥{chengjiao_cost:.2f}")
+col5.markdown(metric_card("销售量", f"{int(total_xiaoshou):,}"), unsafe_allow_html=True)
+col6.markdown(metric_card("收购量", f"{int(total_shougou):,}"), unsafe_allow_html=True)
+col7.markdown(metric_card("客资成本", f"¥{keizi_cost:.2f}"), unsafe_allow_html=True)
+col8.markdown(metric_card("成交成本", f"¥{chengjiao_cost:.2f}"), unsafe_allow_html=True)
 col9,col10,_,_ = st.columns(4)
-col9.metric("到店率", f"{daodian_rate:.2f}%")
-col10.metric("成交率", f"{chengjiao_rate:.2f}%")
+col9.markdown(metric_card("到店率", f"{daodian_rate:.2f}%"), unsafe_allow_html=True)
+col10.markdown(metric_card("成交率", f"{chengjiao_rate:.2f}%"), unsafe_allow_html=True)
 
 st.divider()
 
