@@ -98,17 +98,21 @@ def extract_value(val):
         return val
     if isinstance(val, list):
         return extract_text(val)
-    s = str(val).strip()
-    return s
+    return str(val).strip()
 
 @st.cache_data(ttl=60)
 def read_sheet():
     token = get_token()
     headers = {"Authorization": f"Bearer {token}"}
-    # 不加 renderType，让飞书返回计算后的数值
-    url = f"https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/{SPREADSHEET_TOKEN}/values/{SHEET_ID}!A1:AG2000?valueRenderOption=ToString"
-    res = requests.get(url, headers=headers).json()
-    values = res.get("data", {}).get("valueRange", {}).get("values", [])
+    # 用 v3 API + FormattedValue 获取公式计算结果
+    url = (
+        f"https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/{SPREADSHEET_TOKEN}"
+        f"/values/{SHEET_ID}!A1:AG2000"
+        f"?valueRenderOption=FormattedValue&dateTimeRenderOption=FormattedString"
+    )
+    res = requests.get(url, headers=headers)
+    data = res.json()
+    values = data.get("data", {}).get("valueRange", {}).get("values", [])
     if not values or len(values) < 2:
         return pd.DataFrame()
     headers_row = [extract_text(h) if isinstance(h, list) else (str(h).strip() if h else f"列{i}")
@@ -189,7 +193,6 @@ def apply_filter(df, cities, years, month):
         d = d[d["月份"] == month]
     return d
 
-# ── 加载数据 ──
 with st.spinner("正在加载数据..."):
     try:
         df = clean_df()
@@ -200,7 +203,6 @@ with st.spinner("正在加载数据..."):
         st.error(f"加载失败：{e}")
         st.stop()
 
-# ── 侧边栏 ──
 with st.sidebar:
     st.markdown("## 筛选条件")
     sel_cities = st.multiselect("城市（可多选）", CITIES, default=CITIES)
@@ -210,7 +212,6 @@ with st.sidebar:
     df_filtered = apply_filter(df, sel_cities, sel_years, sel_month)
     st.caption(f"当前数据：{len(df_filtered)} 条")
 
-# ── 页面标题 ──
 st.markdown(f"""
 <div style="padding:8px 0 20px 0;border-bottom:1px solid #eef0f4;margin-bottom:24px;">
     <h2 style="margin:0;color:#111827;font-weight:700;">📊 新媒体年度数据看板</h2>
@@ -222,7 +223,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ── 核心指标 ──
 total_spend     = df_filtered["总花费"].sum() if "总花费" in df_filtered.columns else 0
 total_keizi     = df_filtered["客资总数"].sum() if "客资总数" in df_filtered.columns else 0
 total_daodian   = df_filtered["到店总量"].sum() if "到店总量" in df_filtered.columns else 0
