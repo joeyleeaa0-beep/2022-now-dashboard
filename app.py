@@ -92,7 +92,6 @@ def extract_text(val):
     return str(val).strip()
 
 def extract_value(val):
-    """提取单元格值：数字直接返回，富文本提取文字，公式字符串返回空"""
     if val is None:
         return ""
     if isinstance(val, (int, float)):
@@ -100,9 +99,6 @@ def extract_value(val):
     if isinstance(val, list):
         return extract_text(val)
     s = str(val).strip()
-    # 飞书公式文本，忽略
-    if s.startswith("SUM(") or s.startswith("IFERROR(") or s.startswith("="):
-        return 0
     return s
 
 @st.cache_data(ttl=60)
@@ -110,7 +106,7 @@ def read_sheet():
     token = get_token()
     headers = {"Authorization": f"Bearer {token}"}
     # 不加 renderType，让飞书返回计算后的数值
-    url = f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/{SPREADSHEET_TOKEN}/values/{SHEET_ID}!A1:AG2000"
+    url = f"https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/{SPREADSHEET_TOKEN}/values/{SHEET_ID}!A1:AG2000?valueRenderOption=ToString"
     res = requests.get(url, headers=headers).json()
     values = res.get("data", {}).get("valueRange", {}).get("values", [])
     if not values or len(values) < 2:
