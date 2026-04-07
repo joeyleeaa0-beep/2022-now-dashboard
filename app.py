@@ -14,7 +14,7 @@ st.set_page_config(page_title="新媒体年度数据看板", page_icon="📊", l
 st.markdown("""
 <style>
     .stApp { background-color: #f8f9fc; }
-    #MainMenu, footer, header { visibility: hidden; }
+    #MainMenu, footer { visibility: hidden; }
     [data-testid="metric-container"] {
         background: white !important;
         border: 1px solid #eef0f4;
