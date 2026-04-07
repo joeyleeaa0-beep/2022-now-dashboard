@@ -250,10 +250,9 @@ c10.markdown(metric_html("成交率", f"{chengjiao_rate:.2f}%"), unsafe_allow_ht
 
 st.divider()
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🏙️ 分城市", "📅 年度对比", "📈 趋势分析", "💰 花费分析", "📋 数据明细"
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "🏙️ 分城市", "📅 年度对比", "📈 趋势分析", "💰 花费分析", "📡 分渠道", "📋 数据明细"
 ])
-
 with tab1:
     st.subheader("分城市经营对比")
     if not df_filtered.empty and "城市" in df_filtered.columns:
@@ -393,7 +392,8 @@ with tab4:
                       markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig),use_container_width=True)
 
-    st.divider()
+    
+with tab5:
     st.subheader("分渠道综合对比")
     channel_map = {
         "抖音号": {"花费": "抖音号花费", "客资": "抖音号客资", "成交": "抖音号成交"},
@@ -438,7 +438,7 @@ with tab4:
                          color="渠道",color_discrete_sequence=COLORS)
             st.plotly_chart(make_chart(fig),use_container_width=True)
 
-with tab5:
+with tab6:
     st.subheader("数据明细")
     st.dataframe(df_filtered.dropna(axis=1, how='all'), use_container_width=True)
     buf = BytesIO()
