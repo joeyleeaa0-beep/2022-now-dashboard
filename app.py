@@ -433,6 +433,7 @@ with tab4:
                 fig = px.bar(spend_df,x="渠道",y="花费",title="各渠道花费对比",
                              color="渠道",color_discrete_sequence=COLORS)
                 st.plotly_chart(make_chart(fig),use_container_width=True)
+
     df_spend_trend = apply_filter(df, sel_cities, sel_years, "全部月份")
     if not df_spend_trend.empty and "年份" in df_spend_trend.columns:
         sg = df_spend_trend.groupby("年份").agg(总花费=("总花费","sum")).reset_index()
@@ -441,6 +442,79 @@ with tab4:
         fig = px.line(sg,x="年份",y="总花费",title="各年度总花费趋势",
                       markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig),use_container_width=True)
+
+    # ── 分渠道综合对比 ──
+    st.divider()
+    st.subheader("分渠道综合对比")
+
+    # 渠道花费、客资、成交的列映射
+    channel_map = {
+        "抖音账号": {
+            "花费": "抖音账号花费",
+            "客资": "抖音号客资",
+            "成交": None,
+        },
+        "信息流": {
+            "花费": "信息花费",
+            "客资": "信息流客资数",
+            "成交": None,
+        },
+        "微信": {
+            "花费": "微信花费",
+            "客资": "微信客资客资",
+            "成交": None,
+        },
+        "小红书": {
+            "花费": "小红书花费",
+            "客资": "小红书客资客资",
+            "成交": None,
+        },
+        "其他平台": {
+            "花费": "其他平台花费",
+            "客资": None,
+            "成交": None,
+        },
+    }
+
+    rows = []
+    for ch, cols in channel_map.items():
+        花费 = float(df_filtered[cols["花费"]].sum()) if cols["花费"] and cols["花费"] in df_filtered.columns else 0
+        客资 = float(df_filtered[cols["客资"]].sum()) if cols["客资"] and cols["客资"] in df_filtered.columns else 0
+        成交 = float(df_filtered[cols["成交"]].sum()) if cols["成交"] and cols["成交"] in df_filtered.columns else 0
+        客资成本 = round(花费 / 客资, 2) if 客资 > 0 else 0
+        成交成本 = round(花费 / 成交, 2) if 成交 > 0 else 0
+        if 花费 > 0 or 客资 > 0:
+            rows.append({
+                "渠道": ch,
+                "花费": 花费,
+                "客资量": int(客资),
+                "成交量": int(成交),
+                "客资成本": 客资成本,
+                "成交成本": 成交成本,
+            })
+
+    if rows:
+        ch_df = pd.DataFrame(rows).sort_values("花费", ascending=False)
+        st.dataframe(ch_df, use_container_width=True, hide_index=True)
+
+        ca,cb = st.columns(2)
+        with ca:
+            fig = px.bar(ch_df,x="渠道",y="客资量",title="各渠道客资量",
+                         color="渠道",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+        with cb:
+            fig = px.bar(ch_df,x="渠道",y="花费",title="各渠道花费",
+                         color="渠道",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+        cc,cd = st.columns(2)
+        with cc:
+            fig = px.bar(ch_df,x="渠道",y="客资成本",title="各渠道客资成本",
+                         color="渠道",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+        with cd:
+            fig = px.bar(ch_df,x="渠道",y="成交成本",title="各渠道成交成本",
+                         color="渠道",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
 
 with tab5:
     st.subheader("数据明细")
