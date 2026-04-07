@@ -98,25 +98,29 @@ def extract_value(val):
         return val
     if isinstance(val, list):
         return extract_text(val)
-    return str(val).strip()
+    s = str(val).strip()
+    if s.startswith("SUM(") or s.startswith("IFERROR(") or s.startswith("="):
+        return 0
+    return s
 
 @st.cache_data(ttl=60)
 def read_sheet():
     token = get_token()
     headers = {"Authorization": f"Bearer {token}"}
-    # 用 v3 API + FormattedValue 获取公式计算结果
+    # v2 API，FORMATTED_VALUE 模式
     url = (
-        f"https://open.feishu.cn/open-apis/sheets/v3/spreadsheets/{SPREADSHEET_TOKEN}"
-        f"/values/{SHEET_ID}!A1:AG2000"
-        f"?valueRenderOption=FormattedValue&dateTimeRenderOption=FormattedString"
+        f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/{SPREADSHEET_TOKEN}"
+        f"/values/{SHEET_ID}!A1:AG2000?renderType=FORMATTED_VALUE"
     )
     res = requests.get(url, headers=headers)
     data = res.json()
     values = data.get("data", {}).get("valueRange", {}).get("values", [])
     if not values or len(values) < 2:
         return pd.DataFrame()
-    headers_row = [extract_text(h) if isinstance(h, list) else (str(h).strip() if h else f"列{i}")
-                   for i, h in enumerate(values[0])]
+    headers_row = [
+        extract_text(h) if isinstance(h, list) else (str(h).strip() if h else f"列{i}")
+        for i, h in enumerate(values[0])
+    ]
     rows = []
     for row in values[1:]:
         new_row = [extract_value(cell) for cell in row]
@@ -177,7 +181,7 @@ def clean_df():
     for col in df.columns:
         if col not in skip_cols:
             df[col] = to_num(df[col])
-    # 总花费由各渠道花费加总计算（避免读公式失败）
+    # 总花费由各渠道花费加总计算，避免读公式失败
     花费列 = ["抖音账号花费", "信息花费", "微信花费", "小红书花费", "其他平台花费"]
     有效花费列 = [c for c in 花费列 if c in df.columns]
     if 有效花费列:
