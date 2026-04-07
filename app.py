@@ -156,61 +156,30 @@ def clean_df():
     if df.empty:
         return pd.DataFrame()
 
-    # 重命名列
     rename_map = {
-        "收销总量/台": "收销总量原始",
+        "收销总量/台": "收销总量",
         "销售量/台": "销售量",
         "收购量/台": "收购量",
         "视频成交/台": "视频成交",
         "直播成交/台": "直播成交",
+        "微信客资": "微信客资量",
     }
     df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
 
-    # 年份月份清洗
     if "年份" in df.columns:
         df["年份"] = df["年份"].astype(str).str.strip().str.replace(".0", "", regex=False)
     if "月份" in df.columns:
         df["月份"] = df["月份"].astype(str).str.strip()
         df["月份"] = df["月份"].apply(lambda x: x + "月" if x.isdigit() else x)
 
-    # 数值列转换
     skip_cols = ["城市", "年份", "月份"]
     for col in df.columns:
         if col not in skip_cols:
             df[col] = to_num(df[col])
 
-    # ── 公式列用子列加总重新计算 ──
+    # 全部直接读原始列，不用加总
+    # 总花费、客资总数、到店总量、收销总量 都已经是数值，直接用
 
-    # 总花费
-    花费列 = ["抖音账号花费", "信息花费", "微信花费", "小红书花费", "其他平台花费"]
-    有效花费列 = [c for c in 花费列 if c in df.columns]
-    if 有效花费列:
-        df["总花费"] = df[有效花费列].sum(axis=1)
-
-    # 客资总数
-    # 客资总数直接用原始列（J列），是手填数字可以直接读
-    if "客资总数" in df.columns:
-        df["客资总数"] = to_num(df["客资总数"])
-    # 到店总量
-    # 到店总量直接用原始列
-    if "到店总量" in df.columns:
-        df["到店总量"] = to_num(df["到店总量"])
-
-    # 收销总量：优先用原始列（2022年手填数字），为0时用销售量+收购量，再为0用视频+直播成交
-    if "收销总量原始" in df.columns:
-        df["收销总量"] = to_num(df["收销总量原始"])
-    else:
-        df["收销总量"] = 0
-
-    if "销售量" in df.columns and "收购量" in df.columns:
-        mask = df["收销总量"] == 0
-        df.loc[mask, "收销总量"] = df.loc[mask, "销售量"] + df.loc[mask, "收购量"]
-
-    if "视频成交" in df.columns and "直播成交" in df.columns:
-        mask = df["收销总量"] == 0
-        df.loc[mask, "收销总量"] = df.loc[mask, "视频成交"] + df.loc[mask, "直播成交"]
-
-    # 过滤有效城市和年份
     if "城市" in df.columns:
         df = df[df["城市"].isin(CITIES)].copy()
         df["城市"] = pd.Categorical(df["城市"], categories=CITIES, ordered=True)
@@ -219,7 +188,6 @@ def clean_df():
         df = df[df["年份"].isin(YEARS)].copy()
 
     return df
-
 def apply_filter(df, cities, years, month):
     d = df.copy()
     if cities:
@@ -455,9 +423,9 @@ with tab4:
             "客资": "信息流客资数",
             "成交": "抖音信息流成交",
         },
-        "微信": {
+       "微信": {
             "花费": "微信花费",
-            "客资": "微信客资客资",
+            "客资": "微信客资量",
             "成交": "微信成交",
         },
         "小红书": {
