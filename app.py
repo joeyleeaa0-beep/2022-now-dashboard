@@ -102,7 +102,7 @@ def read_sheet():
     headers = {"Authorization": f"Bearer {token}"}
     url = (
         f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/{SPREADSHEET_TOKEN}"
-        f"/values/{SHEET_ID}!A1:AG2000?renderType=FORMATTED_VALUE"
+        f"/values/{SHEET_ID}!A1:AJ2000?renderType=FORMATTED_VALUE"
     )
     res = requests.get(url, headers=headers).json()
     values = res.get("data", {}).get("valueRange", {}).get("values", [])
@@ -136,18 +136,18 @@ def safe_agg(df, group_col, agg_dict):
         mask = g["客资总数"] > 0
         g["客资成本"] = 0.0
         g.loc[mask, "客资成本"] = (g.loc[mask, "总花费"] / g.loc[mask, "客资总数"]).round(2)
-    if "总花费" in g.columns and "收销总量" in g.columns:
-        mask = g["收销总量"] > 0
+    if "总花费" in g.columns and "销收成交总量" in g.columns:
+        mask = g["销收成交总量"] > 0
         g["成交成本"] = 0.0
-        g.loc[mask, "成交成本"] = (g.loc[mask, "总花费"] / g.loc[mask, "收销总量"]).round(2)
+        g.loc[mask, "成交成本"] = (g.loc[mask, "总花费"] / g.loc[mask, "销收成交总量"]).round(2)
     if "到店总量" in g.columns and "客资总数" in g.columns:
         mask = g["客资总数"] > 0
         g["到店率%"] = 0.0
         g.loc[mask, "到店率%"] = (g.loc[mask, "到店总量"] / g.loc[mask, "客资总数"] * 100).round(2)
-    if "收销总量" in g.columns and "客资总数" in g.columns:
+    if "销收成交总量" in g.columns and "客资总数" in g.columns:
         mask = g["客资总数"] > 0
         g["成交率%"] = 0.0
-        g.loc[mask, "成交率%"] = (g.loc[mask, "收销总量"] / g.loc[mask, "客资总数"] * 100).round(2)
+        g.loc[mask, "成交率%"] = (g.loc[mask, "销收成交总量"] / g.loc[mask, "客资总数"] * 100).round(2)
     return g
 
 @st.cache_data(ttl=60)
@@ -155,16 +155,6 @@ def clean_df():
     df = read_sheet()
     if df.empty:
         return pd.DataFrame()
-
-    rename_map = {
-        "收销总量/台": "收销总量",
-        "销售量/台": "销售量",
-        "收购量/台": "收购量",
-        "视频成交/台": "视频成交",
-        "直播成交/台": "直播成交",
-        "微信客资": "微信客资量",
-    }
-    df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
 
     if "年份" in df.columns:
         df["年份"] = df["年份"].astype(str).str.strip().str.replace(".0", "", regex=False)
@@ -177,9 +167,6 @@ def clean_df():
         if col not in skip_cols:
             df[col] = to_num(df[col])
 
-    # 全部直接读原始列，不用加总
-    # 总花费、客资总数、到店总量、收销总量 都已经是数值，直接用
-
     if "城市" in df.columns:
         df = df[df["城市"].isin(CITIES)].copy()
         df["城市"] = pd.Categorical(df["城市"], categories=CITIES, ordered=True)
@@ -188,6 +175,7 @@ def clean_df():
         df = df[df["年份"].isin(YEARS)].copy()
 
     return df
+
 def apply_filter(df, cities, years, month):
     d = df.copy()
     if cities:
@@ -205,7 +193,6 @@ def metric_html(label, value):
         <div style="color:#111827;font-size:26px;font-weight:700;line-height:1.2;">{value}</div>
     </div>"""
 
-# ── 加载数据 ──
 with st.spinner("正在加载数据..."):
     try:
         df = clean_df()
@@ -216,7 +203,6 @@ with st.spinner("正在加载数据..."):
         st.error(f"加载失败：{e}")
         st.stop()
 
-# ── 侧边栏 ──
 with st.sidebar:
     st.markdown("## 筛选条件")
     sel_cities = st.multiselect("城市（可多选）", CITIES, default=CITIES)
@@ -226,7 +212,6 @@ with st.sidebar:
     df_filtered = apply_filter(df, sel_cities, sel_years, sel_month)
     st.caption(f"当前数据：{len(df_filtered)} 条")
 
-# ── 页面标题 ──
 st.markdown(f"""
 <div style="padding:8px 0 20px 0;border-bottom:1px solid #eef0f4;margin-bottom:24px;">
     <h2 style="margin:0;color:#111827;font-weight:700;">📊 新媒体年度数据看板</h2>
@@ -238,13 +223,12 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ── 核心指标 ──
 total_spend     = df_filtered["总花费"].sum() if "总花费" in df_filtered.columns else 0
 total_keizi     = df_filtered["客资总数"].sum() if "客资总数" in df_filtered.columns else 0
 total_daodian   = df_filtered["到店总量"].sum() if "到店总量" in df_filtered.columns else 0
-total_chengjiao = df_filtered["收销总量"].sum() if "收销总量" in df_filtered.columns else 0
-total_xiaoshou  = df_filtered["销售量"].sum() if "销售量" in df_filtered.columns else 0
-total_shougou   = df_filtered["收购量"].sum() if "收购量" in df_filtered.columns else 0
+total_chengjiao = df_filtered["销收成交总量"].sum() if "销收成交总量" in df_filtered.columns else 0
+total_xiaoshou  = df_filtered["销售成交"].sum() if "销售成交" in df_filtered.columns else 0
+total_shougou   = df_filtered["收购成交"].sum() if "收购成交" in df_filtered.columns else 0
 keizi_cost      = total_spend / total_keizi if total_keizi > 0 else 0
 chengjiao_cost  = total_spend / total_chengjiao if total_chengjiao > 0 else 0
 daodian_rate    = total_daodian / total_keizi * 100 if total_keizi > 0 else 0
@@ -256,8 +240,8 @@ c2.markdown(metric_html("总客资量", f"{int(total_keizi):,}"), unsafe_allow_h
 c3.markdown(metric_html("到店总量", f"{int(total_daodian):,}"), unsafe_allow_html=True)
 c4.markdown(metric_html("总成交量", f"{int(total_chengjiao):,}"), unsafe_allow_html=True)
 c5,c6,c7,c8 = st.columns(4)
-c5.markdown(metric_html("销售量", f"{int(total_xiaoshou):,}"), unsafe_allow_html=True)
-c6.markdown(metric_html("收购量", f"{int(total_shougou):,}"), unsafe_allow_html=True)
+c5.markdown(metric_html("销售成交", f"{int(total_xiaoshou):,}"), unsafe_allow_html=True)
+c6.markdown(metric_html("收购成交", f"{int(total_shougou):,}"), unsafe_allow_html=True)
 c7.markdown(metric_html("客资成本", f"¥{keizi_cost:.2f}"), unsafe_allow_html=True)
 c8.markdown(metric_html("成交成本", f"¥{chengjiao_cost:.2f}"), unsafe_allow_html=True)
 c9,c10,_,_ = st.columns(4)
@@ -277,9 +261,9 @@ with tab1:
             "总花费": ("总花费","sum"),
             "客资总数": ("客资总数","sum"),
             "到店总量": ("到店总量","sum"),
-            "收销总量": ("收销总量","sum"),
-            "销售量": ("销售量","sum"),
-            "收购量": ("收购量","sum"),
+            "销收成交总量": ("销收成交总量","sum"),
+            "销售成交": ("销售成交","sum"),
+            "收购成交": ("收购成交","sum"),
         })
         cg["城市"] = pd.Categorical(cg["城市"], categories=CITIES, ordered=True)
         cg = cg.sort_values("城市")
@@ -290,7 +274,7 @@ with tab1:
                         color_discrete_sequence=COLORS,category_orders={"城市":CITIES})
             st.plotly_chart(make_chart(fig),use_container_width=True)
         with cb:
-            fig = px.bar(cg,x="城市",y="收销总量",title="各城市成交量",color="城市",
+            fig = px.bar(cg,x="城市",y="销收成交总量",title="各城市成交量",color="城市",
                         color_discrete_sequence=COLORS,category_orders={"城市":CITIES})
             st.plotly_chart(make_chart(fig),use_container_width=True)
         cc,cd = st.columns(2)
@@ -320,7 +304,7 @@ with tab2:
             "总花费": ("总花费","sum"),
             "客资总数": ("客资总数","sum"),
             "到店总量": ("到店总量","sum"),
-            "收销总量": ("收销总量","sum"),
+            "销收成交总量": ("销收成交总量","sum"),
         })
         yg["年份"] = pd.Categorical(yg["年份"], categories=YEARS, ordered=True)
         yg = yg.sort_values("年份")
@@ -330,7 +314,7 @@ with tab2:
             fig = px.bar(yg,x="年份",y="客资总数",title="各年度客资量",color="年份",color_discrete_sequence=COLORS)
             st.plotly_chart(make_chart(fig),use_container_width=True)
         with yb:
-            fig = px.bar(yg,x="年份",y="收销总量",title="各年度成交量",color="年份",color_discrete_sequence=COLORS)
+            fig = px.bar(yg,x="年份",y="销收成交总量",title="各年度成交量",color="年份",color_discrete_sequence=COLORS)
             st.plotly_chart(make_chart(fig),use_container_width=True)
         yc,yd = st.columns(2)
         with yc:
@@ -354,7 +338,7 @@ with tab3:
         tm = safe_agg(df_trend, ["年份","月份"], {
             "客资总数": ("客资总数","sum"),
             "到店总量": ("到店总量","sum"),
-            "收销总量": ("收销总量","sum"),
+            "销收成交总量": ("销收成交总量","sum"),
             "总花费": ("总花费","sum"),
         })
         tm["月份"] = pd.Categorical(tm["月份"], categories=MONTHS, ordered=True)
@@ -362,7 +346,7 @@ with tab3:
         fig = px.line(tm,x="月份",y="客资总数",color="年份",title="各年度客资量月度趋势",
                       markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig),use_container_width=True)
-        fig2 = px.line(tm,x="月份",y="收销总量",color="年份",title="各年度成交量月度趋势",
+        fig2 = px.line(tm,x="月份",y="销收成交总量",color="年份",title="各年度成交量月度趋势",
                        markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig2),use_container_width=True)
         fig3 = px.line(tm,x="月份",y="到店率%",color="年份",title="各年度到店率月度趋势",
@@ -375,11 +359,13 @@ with tab3:
 with tab4:
     st.subheader("投放花费分析")
     spend_cols = {
-        "抖音账号": "抖音账号花费",
-        "信息流": "信息花费",
+        "抖音号": "抖音号花费",
+        "信息流": "信息流花费",
         "微信": "微信花费",
         "小红书": "小红书花费",
-        "其他平台": "其他平台花费",
+        "B站": "B站花费",
+        "快手": "快手花费",
+        "之家": "之家花费",
     }
     available_spend = {k: v for k, v in spend_cols.items() if v in df_filtered.columns}
     if available_spend:
@@ -407,39 +393,17 @@ with tab4:
                       markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig),use_container_width=True)
 
-    # ── 分渠道综合对比 ──
     st.divider()
     st.subheader("分渠道综合对比")
-
-    # 渠道花费、客资、成交的列映射
     channel_map = {
-        "抖音账号": {
-            "花费": "抖音账号花费",
-            "客资": "抖音号客资",
-            "成交": "抖音直播号成交",
-        },
-        "信息流": {
-            "花费": "信息花费",
-            "客资": "信息流客资数",
-            "成交": "抖音信息流成交",
-        },
-       "微信": {
-            "花费": "微信花费",
-            "客资": "微信客资量",
-            "成交": "微信成交",
-        },
-        "小红书": {
-            "花费": "小红书花费",
-            "客资": "小红书客资客资",
-            "成交": "小红书成交",
-        },
-        "其他平台": {
-            "花费": "其他平台花费",
-            "客资": None,
-            "成交": None,
-        },
+        "抖音号": {"花费": "抖音号花费", "客资": "抖音号客资", "成交": "抖音号成交"},
+        "信息流": {"花费": "信息流花费", "客资": "信息流客资", "成交": "信息流成交"},
+        "微信":   {"花费": "微信花费",   "客资": "微信客资",   "成交": "微信成交"},
+        "小红书": {"花费": "小红书花费", "客资": "小红书客资", "成交": "小红书成交"},
+        "B站":    {"花费": "B站花费",    "客资": "b站客资",    "成交": "b站成交"},
+        "快手":   {"花费": "快手花费",   "客资": "快手客资",   "成交": "快手成交"},
+        "之家":   {"花费": "之家花费",   "客资": "之家客资",   "成交": "之家成交"},
     }
-
     rows = []
     for ch, cols in channel_map.items():
         花费 = float(df_filtered[cols["花费"]].sum()) if cols["花费"] and cols["花费"] in df_filtered.columns else 0
@@ -449,18 +413,12 @@ with tab4:
         成交成本 = round(花费 / 成交, 2) if 成交 > 0 else 0
         if 花费 > 0 or 客资 > 0:
             rows.append({
-                "渠道": ch,
-                "花费": 花费,
-                "客资量": int(客资),
-                "成交量": int(成交),
-                "客资成本": 客资成本,
-                "成交成本": 成交成本,
+                "渠道": ch, "花费": 花费, "客资量": int(客资),
+                "成交量": int(成交), "客资成本": 客资成本, "成交成本": 成交成本,
             })
-
     if rows:
         ch_df = pd.DataFrame(rows).sort_values("花费", ascending=False)
         st.dataframe(ch_df, use_container_width=True, hide_index=True)
-
         ca,cb = st.columns(2)
         with ca:
             fig = px.bar(ch_df,x="渠道",y="客资量",title="各渠道客资量",
