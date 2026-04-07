@@ -1,0 +1,392 @@
+import streamlit as st
+import pandas as pd
+import requests
+import plotly.express as px
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+from io import BytesIO
+import datetime
+import os
+
+st.set_page_config(page_title="新媒体年度数据看板", page_icon="📊", layout="wide")
+
+st.markdown("""
+<style>
+    .stApp { background-color: #f8f9fc; }
+    #MainMenu, footer, header { visibility: hidden; }
+    [data-testid="metric-container"] {
+        background: white;
+        border: 1px solid #eef0f4;
+        border-radius: 12px;
+        padding: 20px 24px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+    [data-testid="metric-container"] label { color: #6b7280 !important; font-size: 13px !important; font-weight: 500 !important; }
+    [data-testid="metric-container"] [data-testid="stMetricValue"] { color: #111827 !important; font-size: 26px !important; font-weight: 700 !important; }
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; background: transparent; border-bottom: 1px solid #eef0f4; }
+    .stTabs [data-baseweb="tab"] { background: transparent; color: #6b7280; font-weight: 500; border-radius: 6px 6px 0 0; padding: 8px 18px; }
+    .stTabs [aria-selected="true"] { background: white !important; color: #111827 !important; border-bottom: 2px solid #4f46e5 !important; }
+    [data-testid="stSidebar"] { background: white; border-right: 1px solid #eef0f4; }
+    hr { border-color: #eef0f4; }
+</style>
+""", unsafe_allow_html=True)
+
+APP_ID = st.secrets["FEISHU_APP_ID"]
+APP_SECRET = st.secrets["FEISHU_APP_SECRET"]
+SPREADSHEET_TOKEN = "Jf7osfcF7h2pzFt945XcUkCwned"
+SHEET_ID = "0piesb"
+YEARS = ["2022", "2023", "2024", "2025", "2026"]
+MONTHS = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"]
+CITIES = ["深圳", "上海", "成都", "天津"]
+COLORS = ["#4f46e5","#06b6d4","#10b981","#f59e0b","#ef4444","#8b5cf6"]
+PLOTLY_LAYOUT = dict(
+    paper_bgcolor="white", plot_bgcolor="white",
+    font=dict(family="sans-serif", size=12, color="#374151"),
+    margin=dict(l=16, r=16, t=48, b=16),
+    legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, font=dict(size=11)),
+    xaxis=dict(showgrid=False, linecolor="#eef0f4"),
+    yaxis=dict(gridcolor="#f3f4f6", linecolor="#eef0f4"),
+)
+
+# ── 中文字体 ──
+@st.cache_resource
+def setup_chinese_font():
+    font_path = "/tmp/NotoSansSC.ttf"
+    if not os.path.exists(font_path):
+        urls = [
+            "https://cdn.jsdelivr.net/gh/googlefonts/noto-cjk@main/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf",
+            "https://github.com/googlefonts/noto-cjk/raw/main/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf",
+        ]
+        for url in urls:
+            try:
+                r = requests.get(url, timeout=30)
+                if r.status_code == 200:
+                    with open(font_path, "wb") as f:
+                        f.write(r.content)
+                    break
+            except Exception:
+                continue
+    if os.path.exists(font_path):
+        try:
+            fm.fontManager.addfont(font_path)
+            prop = fm.FontProperties(fname=font_path)
+            return prop.get_name(), font_path
+        except Exception:
+            pass
+    return None, None
+
+CHINESE_FONT_NAME, CHINESE_FONT_PATH = setup_chinese_font()
+CHINESE_FONT = CHINESE_FONT_NAME or "DejaVu Sans"
+plt.rcParams["font.sans-serif"] = [CHINESE_FONT, "DejaVu Sans"]
+plt.rcParams["axes.unicode_minus"] = False
+
+def get_font_prop():
+    if CHINESE_FONT_PATH and os.path.exists(CHINESE_FONT_PATH):
+        return fm.FontProperties(fname=CHINESE_FONT_PATH)
+    return fm.FontProperties(family=CHINESE_FONT)
+
+# ── API ──
+@st.cache_data(ttl=60)
+def get_token():
+    res = requests.post(
+        "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+        json={"app_id": APP_ID, "app_secret": APP_SECRET}
+    )
+    return res.json().get("tenant_access_token")
+
+@st.cache_data(ttl=60)
+def read_sheet():
+    token = get_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    url = f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/{SPREADSHEET_TOKEN}/values/{SHEET_ID}!A1:AG2000?renderType=FORMATTED_VALUE"
+    res = requests.get(url, headers=headers).json()
+    values = res.get("data", {}).get("valueRange", {}).get("values", [])
+    if not values or len(values) < 2:
+        return pd.DataFrame()
+    headers_row = [str(h).strip() if h else f"列{i}" for i, h in enumerate(values[0])]
+    df = pd.DataFrame(values[1:], columns=headers_row)
+    return df
+
+# ── 工具函数 ──
+def to_num(series):
+    if isinstance(series, pd.Series):
+        s = series.astype(str)
+        s = s.str.replace(r'IFERROR\(.*?\)', '0', regex=True)
+        s = s.str.replace("/", "0").str.replace(",", "")
+        return pd.to_numeric(s, errors="coerce").fillna(0)
+    return 0
+
+def make_chart(fig):
+    fig.update_layout(**PLOTLY_LAYOUT)
+    return fig
+
+# ── 数据清洗 ──
+@st.cache_data(ttl=60)
+def clean_df():
+    df = read_sheet()
+    if df.empty:
+        return pd.DataFrame()
+    # 数值列转换
+    num_cols = [c for c in df.columns if c not in ["城市", "年份", "月份"]]
+    for col in num_cols:
+        df[col] = to_num(df[col])
+    # 过滤有效城市
+    if "城市" in df.columns:
+        df = df[df["城市"].isin(CITIES)].copy()
+    # 年份统一为字符串
+    if "年份" in df.columns:
+        df["年份"] = df["年份"].astype(str).str.strip().str.replace(".0", "", regex=False)
+    if "月份" in df.columns:
+        df["月份"] = df["月份"].astype(str).str.strip()
+    # 计算派生指标
+    if "客资总数" in df.columns and "到店总量" in df.columns:
+        df["到店率"] = (df["到店总量"] / df["客资总数"].replace(0, pd.NA) * 100).round(2)
+    if "总花费" in df.columns and "客资总数" in df.columns:
+        df["客资成本"] = (df["总花费"] / df["客资总数"].replace(0, pd.NA)).round(2)
+    if "总花费" in df.columns and "收销总量/台" in df.columns:
+        df["成交成本"] = (df["总花费"] / df["收销总量/台"].replace(0, pd.NA)).round(2)
+    if "收销总量/台" in df.columns and "客资总数" in df.columns:
+        df["成交率"] = (df["收销总量/台"] / df["客资总数"].replace(0, pd.NA) * 100).round(2)
+    return df
+
+def apply_filter(df, cities, years, month):
+    d = df.copy()
+    if cities:
+        d = d[d["城市"].isin(cities)]
+    if years:
+        d = d[d["年份"].isin(years)]
+    if month != "全部月份" and "月份" in d.columns:
+        d = d[d["月份"] == month]
+    return d
+
+# ── 加载数据 ──
+with st.spinner("正在加载数据..."):
+    try:
+        df = clean_df()
+        if df.empty:
+            st.error("数据加载失败或表格为空，请检查飞书配置")
+            st.stop()
+    except Exception as e:
+        st.error(f"加载失败：{e}")
+        st.stop()
+
+# ── 侧边栏筛选 ──
+with st.sidebar:
+    st.markdown("## 筛选条件")
+    sel_cities = st.multiselect("城市（可多选）", CITIES, default=CITIES)
+    sel_years = st.multiselect("年份（可多选）", YEARS, default=YEARS)
+    sel_month = st.selectbox("月份", ["全部月份"] + MONTHS)
+    st.divider()
+    df_filtered = apply_filter(df, sel_cities, sel_years, sel_month)
+    st.caption(f"当前数据：{len(df_filtered)} 条")
+
+# ── 页面标题 ──
+st.markdown(f"""
+<div style="padding:8px 0 20px 0;border-bottom:1px solid #eef0f4;margin-bottom:24px;">
+    <h2 style="margin:0;color:#111827;font-weight:700;">📊 新媒体年度数据看板</h2>
+    <p style="margin:4px 0 0 0;color:#6b7280;font-size:14px;">
+        城市：{'、'.join(sel_cities) if sel_cities else '未选择'} ·
+        年份：{'、'.join(sel_years) if sel_years else '未选择'} ·
+        {sel_month} · 数据每60秒自动更新
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# ── 核心指标 ──
+total_spend   = df_filtered["总花费"].sum() if "总花费" in df_filtered.columns else 0
+total_keizi   = df_filtered["客资总数"].sum() if "客资总数" in df_filtered.columns else 0
+total_daodian = df_filtered["到店总量"].sum() if "到店总量" in df_filtered.columns else 0
+total_chengjiao = df_filtered["收销总量/台"].sum() if "收销总量/台" in df_filtered.columns else 0
+total_xiaoshou  = df_filtered["销售量/台"].sum() if "销售量/台" in df_filtered.columns else 0
+total_shougou   = df_filtered["收购量/台"].sum() if "收购量/台" in df_filtered.columns else 0
+keizi_cost    = total_spend / total_keizi if total_keizi > 0 else 0
+chengjiao_cost = total_spend / total_chengjiao if total_chengjiao > 0 else 0
+daodian_rate  = total_daodian / total_keizi * 100 if total_keizi > 0 else 0
+chengjiao_rate = total_chengjiao / total_keizi * 100 if total_keizi > 0 else 0
+
+c1,c2,c3,c4 = st.columns(4)
+c1.metric("总花费", f"¥{total_spend:,.0f}")
+c2.metric("总客资量", f"{int(total_keizi):,}")
+c3.metric("到店总量", f"{int(total_daodian):,}")
+c4.metric("总成交量", f"{int(total_chengjiao):,}")
+c5,c6,c7,c8 = st.columns(4)
+c5.metric("销售量", f"{int(total_xiaoshou):,}")
+c6.metric("收购量", f"{int(total_shougou):,}")
+c7.metric("客资成本", f"¥{keizi_cost:.2f}")
+c8.metric("成交成本", f"¥{chengjiao_cost:.2f}")
+c9,c10,_,_ = st.columns(4)
+c9.metric("到店率", f"{daodian_rate:.2f}%")
+c10.metric("成交率", f"{chengjiao_rate:.2f}%")
+
+st.divider()
+
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🏙️ 分城市", "📅 年度对比", "📈 趋势分析", "💰 花费分析", "📋 数据明细"
+])
+
+# ── Tab1: 分城市 ──
+with tab1:
+    st.subheader("分城市经营对比")
+    if not df_filtered.empty and "城市" in df_filtered.columns:
+        cg = df_filtered.groupby("城市").agg(
+            总花费=("总花费","sum"),
+            客资总数=("客资总数","sum"),
+            到店总量=("到店总量","sum"),
+            收销总量=("收销总量/台","sum"),
+            销售量=("销售量/台","sum"),
+            收购量=("收购量/台","sum"),
+        ).reset_index()
+        cg["客资成本"] = (cg["总花费"] / cg["客资总数"].replace(0,pd.NA)).round(2)
+        cg["成交成本"] = (cg["总花费"] / cg["收销总量"].replace(0,pd.NA)).round(2)
+        cg["到店率%"] = (cg["到店总量"] / cg["客资总数"].replace(0,pd.NA) * 100).round(2)
+        cg["成交率%"] = (cg["收销总量"] / cg["客资总数"].replace(0,pd.NA) * 100).round(2)
+        st.dataframe(cg, use_container_width=True, hide_index=True)
+        ca,cb = st.columns(2)
+        with ca:
+            fig = px.bar(cg,x="城市",y="客资总数",title="各城市客资量",color="城市",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+        with cb:
+            fig = px.bar(cg,x="城市",y="收销总量",title="各城市成交量",color="城市",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+        cc,cd = st.columns(2)
+        with cc:
+            fig = px.bar(cg,x="城市",y="到店总量",title="各城市到店量",color="城市",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+        with cd:
+            fig = px.bar(cg,x="城市",y="到店率%",title="各城市到店率",color="城市",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+        ce,cf = st.columns(2)
+        with ce:
+            fig = px.bar(cg,x="城市",y="客资成本",title="各城市客资成本",color="城市",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+        with cf:
+            fig = px.bar(cg,x="城市",y="成交成本",title="各城市成交成本",color="城市",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+
+# ── Tab2: 年度对比 ──
+with tab2:
+    st.subheader("年度数据对比")
+    if not df.empty and "年份" in df.columns:
+        # 用全量数据按年份聚合（不受月份筛选影响，但受城市影响）
+        df_year = apply_filter(df, sel_cities, sel_years, "全部月份")
+        yg = df_year.groupby("年份").agg(
+            总花费=("总花费","sum"),
+            客资总数=("客资总数","sum"),
+            到店总量=("到店总量","sum"),
+            收销总量=("收销总量/台","sum"),
+        ).reset_index()
+        yg["客资成本"] = (yg["总花费"] / yg["客资总数"].replace(0,pd.NA)).round(2)
+        yg["成交成本"] = (yg["总花费"] / yg["收销总量"].replace(0,pd.NA)).round(2)
+        yg["到店率%"] = (yg["到店总量"] / yg["客资总数"].replace(0,pd.NA) * 100).round(2)
+        yg["成交率%"] = (yg["收销总量"] / yg["客资总数"].replace(0,pd.NA) * 100).round(2)
+        yg["年份"] = pd.Categorical(yg["年份"], categories=YEARS, ordered=True)
+        yg = yg.sort_values("年份")
+        st.dataframe(yg, use_container_width=True, hide_index=True)
+        ya,yb = st.columns(2)
+        with ya:
+            fig = px.bar(yg,x="年份",y="客资总数",title="各年度客资量",color="年份",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+        with yb:
+            fig = px.bar(yg,x="年份",y="收销总量",title="各年度成交量",color="年份",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+        yc,yd = st.columns(2)
+        with yc:
+            fig = px.bar(yg,x="年份",y="到店总量",title="各年度到店量",color="年份",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+        with yd:
+            fig = px.bar(yg,x="年份",y="总花费",title="各年度总花费",color="年份",color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+        ye,yf = st.columns(2)
+        with ye:
+            fig = px.line(yg,x="年份",y="客资成本",title="各年度客资成本趋势",markers=True,color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+        with yf:
+            fig = px.line(yg,x="年份",y="到店率%",title="各年度到店率趋势",markers=True,color_discrete_sequence=COLORS)
+            st.plotly_chart(make_chart(fig),use_container_width=True)
+
+# ── Tab3: 趋势分析 ──
+with tab3:
+    st.subheader("月度趋势分析")
+    df_trend = apply_filter(df, sel_cities, sel_years, "全部月份")
+    if not df_trend.empty and "月份" in df_trend.columns:
+        # 按年份+月份聚合
+        tm = df_trend.groupby(["年份","月份"]).agg(
+            客资总数=("客资总数","sum"),
+            到店总量=("到店总量","sum"),
+            收销总量=("收销总量/台","sum"),
+            总花费=("总花费","sum"),
+        ).reset_index()
+        tm["客资成本"] = (tm["总花费"] / tm["客资总数"].replace(0,pd.NA)).round(2)
+        tm["到店率%"] = (tm["到店总量"] / tm["客资总数"].replace(0,pd.NA) * 100).round(2)
+        tm["月份"] = pd.Categorical(tm["月份"], categories=MONTHS, ordered=True)
+        tm = tm.sort_values(["年份","月份"])
+
+        fig = px.line(tm,x="月份",y="客资总数",color="年份",title="各年度客资量月度趋势",
+                      markers=True,color_discrete_sequence=COLORS)
+        st.plotly_chart(make_chart(fig),use_container_width=True)
+
+        fig2 = px.line(tm,x="月份",y="收销总量",color="年份",title="各年度成交量月度趋势",
+                       markers=True,color_discrete_sequence=COLORS)
+        st.plotly_chart(make_chart(fig2),use_container_width=True)
+
+        fig3 = px.line(tm,x="月份",y="到店率%",color="年份",title="各年度到店率月度趋势",
+                       markers=True,color_discrete_sequence=COLORS)
+        st.plotly_chart(make_chart(fig3),use_container_width=True)
+
+        fig4 = px.line(tm,x="月份",y="客资成本",color="年份",title="各年度客资成本月度趋势",
+                       markers=True,color_discrete_sequence=COLORS)
+        st.plotly_chart(make_chart(fig4),use_container_width=True)
+
+# ── Tab4: 花费分析 ──
+with tab4:
+    st.subheader("投放花费分析")
+    spend_cols = {
+        "抖音账号花费": "抖音账号花费",
+        "信息流花费": "信息流花费",
+        "微信花费": "微信花费",
+        "小红书花费": "小红书花费",
+        "其他平台花费": "其他平台花费",
+    }
+    available_spend = {k:v for k,v in spend_cols.items() if v in df_filtered.columns}
+    if available_spend:
+        spend_data = {k: df_filtered[v].sum() for k,v in available_spend.items()}
+        spend_df = pd.DataFrame({"渠道": list(spend_data.keys()), "花费": list(spend_data.values())})
+        spend_df = spend_df[spend_df["花费"] > 0]
+        if not spend_df.empty:
+            sa,sb = st.columns(2)
+            with sa:
+                fig = px.pie(spend_df,names="渠道",values="花费",title="各渠道花费占比",
+                             color_discrete_sequence=COLORS)
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(make_chart(fig),use_container_width=True)
+            with sb:
+                fig = px.bar(spend_df,x="渠道",y="花费",title="各渠道花费对比",
+                             color="渠道",color_discrete_sequence=COLORS)
+                st.plotly_chart(make_chart(fig),use_container_width=True)
+
+    # 按年份看花费趋势
+    df_spend_trend = apply_filter(df, sel_cities, sel_years, "全部月份")
+    if not df_spend_trend.empty and "年份" in df_spend_trend.columns:
+        sg = df_spend_trend.groupby("年份").agg(总花费=("总花费","sum")).reset_index()
+        sg["年份"] = pd.Categorical(sg["年份"], categories=YEARS, ordered=True)
+        sg = sg.sort_values("年份")
+        fig = px.line(sg,x="年份",y="总花费",title="各年度总花费趋势",
+                      markers=True,color_discrete_sequence=COLORS)
+        st.plotly_chart(make_chart(fig),use_container_width=True)
+
+# ── Tab5: 数据明细 ──
+with tab5:
+    st.subheader("数据明细")
+    st.dataframe(df_filtered.dropna(axis=1, how='all'), use_container_width=True)
+    # 导出Excel
+    buf = BytesIO()
+    df_filtered.to_excel(buf, index=False, engine='xlsxwriter')
+    buf.seek(0)
+    st.download_button(
+        label="⬇️ 导出 Excel",
+        data=buf,
+        file_name=f"新媒体数据_{datetime.datetime.now().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
