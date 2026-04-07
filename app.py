@@ -22,7 +22,7 @@ st.markdown("""
         padding: 20px 24px;
         box-shadow: 0 1px 4px rgba(0,0,0,0.05);
     }
-    [data-testid="metric-container"] label { color: #6b7280 !important; font-size: 13px !important; font-weight: 500 !important; }
+    [data-testid="metric-container"] [data-testid="stMetricValue"] { color: #111827 !important; font-size: 26px !important; font-weight: 700 !important; background: white; }
     [data-testid="metric-container"] [data-testid="stMetricValue"] { color: #111827 !important; font-size: 26px !important; font-weight: 700 !important; }
     .stTabs [data-baseweb="tab-list"] { gap: 8px; background: transparent; border-bottom: 1px solid #eef0f4; }
     .stTabs [data-baseweb="tab"] { background: transparent; color: #6b7280; font-weight: 500; border-radius: 6px 6px 0 0; padding: 8px 18px; }
@@ -186,8 +186,10 @@ def clean_df():
     有效花费列 = [c for c in 花费列 if c in df.columns]
     if 有效花费列:
         df["总花费"] = df[有效花费列].sum(axis=1)
-    if "城市" in df.columns:
+   if "城市" in df.columns:
         df = df[df["城市"].isin(CITIES)].copy()
+        df["城市"] = pd.Categorical(df["城市"], categories=CITIES, ordered=True)
+        df = df.sort_values("城市")
     if "年份" in df.columns:
         df = df[df["年份"].isin(YEARS)].copy()
     return df
