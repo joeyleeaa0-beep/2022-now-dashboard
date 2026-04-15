@@ -102,7 +102,7 @@ def read_sheet():
     headers = {"Authorization": f"Bearer {token}"}
     url = (
         f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/{SPREADSHEET_TOKEN}"
-        f"/values/{SHEET_ID}!A1:AJ2000?renderType=FORMATTED_VALUE"
+        f"/values/{SHEET_ID}!A1:AQ2000?renderType=FORMATTED_VALUE"
     )
     res = requests.get(url, headers=headers).json()
     values = res.get("data", {}).get("valueRange", {}).get("values", [])
