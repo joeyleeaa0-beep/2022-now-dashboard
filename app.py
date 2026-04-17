@@ -140,14 +140,46 @@ def safe_agg(df, group_col, agg_dict):
         mask = g["销收成交总量"] > 0
         g["成交成本"] = 0.0
         g.loc[mask, "成交成本"] = (g.loc[mask, "总花费"] / g.loc[mask, "销收成交总量"]).round(2)
+    # 总到店率
     if "到店总量" in g.columns and "客资总数" in g.columns:
         mask = g["客资总数"] > 0
-        g["到店率%"] = 0.0
-        g.loc[mask, "到店率%"] = (g.loc[mask, "到店总量"] / g.loc[mask, "客资总数"] * 100).round(2)
+        g["总到店率%"] = 0.0
+        g.loc[mask, "总到店率%"] = (g.loc[mask, "到店总量"] / g.loc[mask, "客资总数"] * 100).round(2)
+    # 总成交率
     if "销收成交总量" in g.columns and "客资总数" in g.columns:
         mask = g["客资总数"] > 0
-        g["成交率%"] = 0.0
-        g.loc[mask, "成交率%"] = (g.loc[mask, "销收成交总量"] / g.loc[mask, "客资总数"] * 100).round(2)
+        g["总成交率%"] = 0.0
+        g.loc[mask, "总成交率%"] = (g.loc[mask, "销收成交总量"] / g.loc[mask, "客资总数"] * 100).round(2)
+    # 销售线索-到店率
+    if "销售到店" in g.columns and "客资总数" in g.columns:
+        mask = g["客资总数"] > 0
+        g["销售线索到店率%"] = 0.0
+        g.loc[mask, "销售线索到店率%"] = (g.loc[mask, "销售到店"] / g.loc[mask, "客资总数"] * 100).round(2)
+    # 收购线索-到店率
+    if "收购到店" in g.columns and "客资总数" in g.columns:
+        mask = g["客资总数"] > 0
+        g["收购线索到店率%"] = 0.0
+        g.loc[mask, "收购线索到店率%"] = (g.loc[mask, "收购到店"] / g.loc[mask, "客资总数"] * 100).round(2)
+    # 销售到店-成交率
+    if "销售成交" in g.columns and "销售到店" in g.columns:
+        mask = g["销售到店"] > 0
+        g["销售到店成交率%"] = 0.0
+        g.loc[mask, "销售到店成交率%"] = (g.loc[mask, "销售成交"] / g.loc[mask, "销售到店"] * 100).round(2)
+    # 收购到店-成交率
+    if "收购成交" in g.columns and "收购到店" in g.columns:
+        mask = g["收购到店"] > 0
+        g["收购到店成交率%"] = 0.0
+        g.loc[mask, "收购到店成交率%"] = (g.loc[mask, "收购成交"] / g.loc[mask, "收购到店"] * 100).round(2)
+    # 销售线索-成交率
+    if "销售成交" in g.columns and "销售客资" in g.columns:
+        mask = g["销售客资"] > 0
+        g["销售线索成交率%"] = 0.0
+        g.loc[mask, "销售线索成交率%"] = (g.loc[mask, "销售成交"] / g.loc[mask, "销售客资"] * 100).round(2)
+    # 收购线索-成交率
+    if "收购成交" in g.columns and "收购客资" in g.columns:
+        mask = g["收购客资"] > 0
+        g["收购线索成交率%"] = 0.0
+        g.loc[mask, "收购线索成交率%"] = (g.loc[mask, "收购成交"] / g.loc[mask, "收购客资"] * 100).round(2)
     return g
 
 @st.cache_data(ttl=60)
@@ -259,7 +291,11 @@ with tab1:
         cg = safe_agg(df_filtered, "城市", {
             "总花费": ("总花费","sum"),
             "客资总数": ("客资总数","sum"),
+            "销售客资": ("销售客资","sum"),
+            "收购客资": ("收购客资","sum"),
             "到店总量": ("到店总量","sum"),
+            "销售到店": ("销售到店","sum"),
+            "收购到店": ("收购到店","sum"),
             "销收成交总量": ("销收成交总量","sum"),
             "销售成交": ("销售成交","sum"),
             "收购成交": ("收购成交","sum"),
@@ -302,8 +338,14 @@ with tab2:
         yg = safe_agg(df_year, "年份", {
             "总花费": ("总花费","sum"),
             "客资总数": ("客资总数","sum"),
+            "销售客资": ("销售客资","sum"),
+            "收购客资": ("收购客资","sum"),
             "到店总量": ("到店总量","sum"),
+            "销售到店": ("销售到店","sum"),
+            "收购到店": ("收购到店","sum"),
             "销收成交总量": ("销收成交总量","sum"),
+            "销售成交": ("销售成交","sum"),
+            "收购成交": ("收购成交","sum"),
         })
         yg["年份"] = pd.Categorical(yg["年份"], categories=YEARS, ordered=True)
         yg = yg.sort_values("年份")
