@@ -140,42 +140,34 @@ def safe_agg(df, group_col, agg_dict):
         mask = g["销收成交总量"] > 0
         g["成交成本"] = 0.0
         g.loc[mask, "成交成本"] = (g.loc[mask, "总花费"] / g.loc[mask, "销收成交总量"]).round(2)
-    # 总到店率
     if "到店总量" in g.columns and "客资总数" in g.columns:
         mask = g["客资总数"] > 0
         g["总到店率%"] = 0.0
         g.loc[mask, "总到店率%"] = (g.loc[mask, "到店总量"] / g.loc[mask, "客资总数"] * 100).round(2)
-    # 总成交率
     if "销收成交总量" in g.columns and "客资总数" in g.columns:
         mask = g["客资总数"] > 0
         g["总成交率%"] = 0.0
         g.loc[mask, "总成交率%"] = (g.loc[mask, "销收成交总量"] / g.loc[mask, "客资总数"] * 100).round(2)
-    # 销售线索-到店率
     if "销售到店" in g.columns and "客资总数" in g.columns:
         mask = g["客资总数"] > 0
         g["销售线索到店率%"] = 0.0
         g.loc[mask, "销售线索到店率%"] = (g.loc[mask, "销售到店"] / g.loc[mask, "客资总数"] * 100).round(2)
-    # 收购线索-到店率
     if "收购到店" in g.columns and "客资总数" in g.columns:
         mask = g["客资总数"] > 0
         g["收购线索到店率%"] = 0.0
         g.loc[mask, "收购线索到店率%"] = (g.loc[mask, "收购到店"] / g.loc[mask, "客资总数"] * 100).round(2)
-    # 销售到店-成交率
     if "销售成交" in g.columns and "销售到店" in g.columns:
         mask = g["销售到店"] > 0
         g["销售到店成交率%"] = 0.0
         g.loc[mask, "销售到店成交率%"] = (g.loc[mask, "销售成交"] / g.loc[mask, "销售到店"] * 100).round(2)
-    # 收购到店-成交率
     if "收购成交" in g.columns and "收购到店" in g.columns:
         mask = g["收购到店"] > 0
         g["收购到店成交率%"] = 0.0
         g.loc[mask, "收购到店成交率%"] = (g.loc[mask, "收购成交"] / g.loc[mask, "收购到店"] * 100).round(2)
-    # 销售线索-成交率
     if "销售成交" in g.columns and "销售客资" in g.columns:
         mask = g["销售客资"] > 0
         g["销售线索成交率%"] = 0.0
         g.loc[mask, "销售线索成交率%"] = (g.loc[mask, "销售成交"] / g.loc[mask, "销售客资"] * 100).round(2)
-    # 收购线索-成交率
     if "收购成交" in g.columns and "收购客资" in g.columns:
         mask = g["收购客资"] > 0
         g["收购线索成交率%"] = 0.0
@@ -187,25 +179,21 @@ def clean_df():
     df = read_sheet()
     if df.empty:
         return pd.DataFrame()
-
     if "年份" in df.columns:
         df["年份"] = df["年份"].astype(str).str.strip().str.replace(".0", "", regex=False)
     if "月份" in df.columns:
         df["月份"] = df["月份"].astype(str).str.strip()
         df["月份"] = df["月份"].apply(lambda x: x + "月" if x.isdigit() else x)
-
     skip_cols = ["城市", "年份", "月份"]
     for col in df.columns:
         if col not in skip_cols:
             df[col] = to_num(df[col])
-
     if "城市" in df.columns:
         df = df[df["城市"].isin(CITIES)].copy()
         df["城市"] = pd.Categorical(df["城市"], categories=CITIES, ordered=True)
         df = df.sort_values("城市")
     if "年份" in df.columns:
         df = df[df["年份"].isin(YEARS)].copy()
-
     return df
 
 def apply_filter(df, cities, years, month):
@@ -285,8 +273,8 @@ st.divider()
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏙️ 分城市", "📅 年度对比", "📈 趋势分析", "💰 花费分析", "📡 分渠道", "📋 数据明细"
 ])
+
 with tab1:
-    st.subheader("分城市经营对比")
     st.subheader("分城市经营对比")
     st.markdown("""
     <div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#92400e;">
@@ -326,7 +314,7 @@ with tab1:
                         color_discrete_sequence=COLORS,category_orders={"城市":CITIES})
             st.plotly_chart(make_chart(fig),use_container_width=True)
         with cd:
-            fig = px.bar(cg,x="城市",y="到店率%",title="各城市到店率(%)",color="城市",
+            fig = px.bar(cg,x="城市",y="总到店率%",title="各城市总到店率(%)",color="城市",
                         color_discrete_sequence=COLORS,category_orders={"城市":CITIES})
             st.plotly_chart(make_chart(fig),use_container_width=True)
         ce,cf = st.columns(2)
@@ -377,7 +365,7 @@ with tab2:
             fig = px.line(yg,x="年份",y="客资成本",title="各年度客资成本趋势",markers=True,color_discrete_sequence=COLORS)
             st.plotly_chart(make_chart(fig),use_container_width=True)
         with yf:
-            fig = px.line(yg,x="年份",y="到店率%",title="各年度到店率趋势",markers=True,color_discrete_sequence=COLORS)
+            fig = px.line(yg,x="年份",y="总到店率%",title="各年度到店率趋势",markers=True,color_discrete_sequence=COLORS)
             st.plotly_chart(make_chart(fig),use_container_width=True)
 
 with tab3:
@@ -389,6 +377,12 @@ with tab3:
             "到店总量": ("到店总量","sum"),
             "销收成交总量": ("销收成交总量","sum"),
             "总花费": ("总花费","sum"),
+            "销售到店": ("销售到店","sum"),
+            "收购到店": ("收购到店","sum"),
+            "销售成交": ("销售成交","sum"),
+            "收购成交": ("收购成交","sum"),
+            "销售客资": ("销售客资","sum"),
+            "收购客资": ("收购客资","sum"),
         })
         tm["月份"] = pd.Categorical(tm["月份"], categories=MONTHS, ordered=True)
         tm = tm.sort_values(["年份","月份"])
@@ -398,7 +392,7 @@ with tab3:
         fig2 = px.line(tm,x="月份",y="销收成交总量",color="年份",title="各年度成交量月度趋势",
                        markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig2),use_container_width=True)
-        fig3 = px.line(tm,x="月份",y="到店率%",color="年份",title="各年度到店率月度趋势",
+        fig3 = px.line(tm,x="月份",y="总到店率%",color="年份",title="各年度到店率月度趋势",
                        markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig3),use_container_width=True)
         fig4 = px.line(tm,x="月份",y="客资成本",color="年份",title="各年度客资成本月度趋势",
@@ -432,7 +426,6 @@ with tab4:
                 fig = px.bar(spend_df,x="渠道",y="花费",title="各渠道花费对比",
                              color="渠道",color_discrete_sequence=COLORS)
                 st.plotly_chart(make_chart(fig),use_container_width=True)
-
     df_spend_trend = apply_filter(df, sel_cities, sel_years, "全部月份")
     if not df_spend_trend.empty and "年份" in df_spend_trend.columns:
         sg = df_spend_trend.groupby("年份").agg(总花费=("总花费","sum")).reset_index()
@@ -442,7 +435,6 @@ with tab4:
                       markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig),use_container_width=True)
 
-    
 with tab5:
     st.subheader("分渠道综合对比")
     channel_map = {
