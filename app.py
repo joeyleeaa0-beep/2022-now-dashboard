@@ -287,6 +287,14 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 ])
 with tab1:
     st.subheader("分城市经营对比")
+    st.subheader("分城市经营对比")
+    st.markdown("""
+    <div style="background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#92400e;">
+        ⚠️ <b>数据说明：</b><br>
+        1. 2022年、2023年原始数据缺失及表格混乱，部分数据可能不准确，仅作参考；<br>
+        2. 2024、2025、2026年数据基本正确，如发现差异请反馈媒介调整。
+    </div>
+    """, unsafe_allow_html=True)
     if not df_filtered.empty and "城市" in df_filtered.columns:
         cg = safe_agg(df_filtered, "城市", {
             "总花费": ("总花费","sum"),
