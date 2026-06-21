@@ -298,6 +298,9 @@ with tab1:
         })
         cg["城市"] = pd.Categorical(cg["城市"], categories=CITIES, ordered=True)
         cg = cg.sort_values("城市")
+        for col in ["总花费", "客资成本", "成交成本"]:
+            if col in cg.columns:
+                cg[col] = cg[col].round(2)
         st.dataframe(cg, use_container_width=True, hide_index=True)
         ca,cb = st.columns(2)
         with ca:
@@ -345,7 +348,10 @@ with tab2:
         })
         yg["年份"] = pd.Categorical(yg["年份"], categories=YEARS, ordered=True)
         yg = yg.sort_values("年份")
-        st.dataframe(yg, use_container_width=True, hide_index=True)
+      display_yg = yg.copy()
+        if "总花费" in display_yg.columns:
+            display_yg["总花费"] = display_yg["总花费"].round(2)
+        st.dataframe(display_yg, use_container_width=True, hide_index=True)
         ya,yb = st.columns(2)
         with ya:
             fig = px.bar(yg,x="年份",y="客资总数",title="各年度客资量",color="年份",color_discrete_sequence=COLORS)
