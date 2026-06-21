@@ -398,6 +398,9 @@ with tab3:
         fig4 = px.line(tm,x="月份",y="客资成本",color="年份",title="各年度客资成本月度趋势",
                        markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig4),use_container_width=True)
+        fig5 = px.line(tm,x="月份",y="总花费",color="年份",title="各年度花费月度趋势",
+                       markers=True,color_discrete_sequence=COLORS)
+        st.plotly_chart(make_chart(fig5),use_container_width=True)
 
 with tab4:
     st.subheader("投放花费分析")
