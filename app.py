@@ -464,15 +464,20 @@ with tab5:
         成交成本 = round(花费 / 成交, 2) if 成交 > 0 else 0
         if 花费 > 0 or 客资 > 0:
             rows.append({
-                "渠道": ch, "花费": round(花费, 2), "客资量": int(客资),
-                "成交量": int(成交), "客资成本": 客资成本, "成交成本": 成交成本,
+                "渠道": ch,
+                "花费": round(花费, 2),
+                "客资": int(客资),
+                "客资成本": 客资成本,
+                "成交": int(成交),
+                "成交成本": 成交成本,
+                "成交率%": round(成交 / 客资 * 100, 2) if 客资 > 0 else 0,
             })
     if rows:
         ch_df = pd.DataFrame(rows).sort_values("花费", ascending=False)
         st.dataframe(ch_df, use_container_width=True, hide_index=True)
         ca,cb = st.columns(2)
         with ca:
-            fig = px.bar(ch_df,x="渠道",y="客资量",title="各渠道客资量",
+            fig = px.bar(ch_df,x="渠道",y="客资",title="各渠道客资量",
                          color="渠道",color_discrete_sequence=COLORS)
             st.plotly_chart(make_chart(fig),use_container_width=True)
         with cb:
