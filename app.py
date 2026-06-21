@@ -332,6 +332,7 @@ with tab1:
 
 with tab2:
     st.subheader("年度数据对比")
+    st.info("💡 年度对比显示全年数据，不受月份筛选影响")
     df_year = apply_filter(df, sel_cities, sel_years, [])
     if not df_year.empty and "年份" in df_year.columns:
         yg = safe_agg(df_year, "年份", {
@@ -376,6 +377,7 @@ with tab2:
 
 with tab3:
     st.subheader("月度趋势分析")
+    st.info("💡 趋势分析显示全年月度走势，不受月份筛选影响")
     df_trend = apply_filter(df, sel_cities, sel_years, [])
     if not df_trend.empty and "月份" in df_trend.columns:
         tm = safe_agg(df_trend, ["年份","月份"], {
