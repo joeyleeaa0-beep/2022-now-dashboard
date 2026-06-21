@@ -348,10 +348,10 @@ with tab2:
         })
         yg["年份"] = pd.Categorical(yg["年份"], categories=YEARS, ordered=True)
         yg = yg.sort_values("年份")
-      display_yg = yg.copy()
-        if "总花费" in display_yg.columns:
-            display_yg["总花费"] = display_yg["总花费"].round(2)
-        st.dataframe(display_yg, use_container_width=True, hide_index=True)
+        for col in ["总花费", "客资成本", "成交成本"]:
+            if col in yg.columns:
+                yg[col] = yg[col].round(2)
+        st.dataframe(yg, use_container_width=True, hide_index=True)
         ya,yb = st.columns(2)
         with ya:
             fig = px.bar(yg,x="年份",y="客资总数",title="各年度客资量",color="年份",color_discrete_sequence=COLORS)
@@ -396,7 +396,7 @@ with tab3:
                        markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig1),use_container_width=True)
         fig2 = px.line(tm,x="月份",y="客资总数",color="年份",title="各年度客资量月度趋势",
-                      markers=True,color_discrete_sequence=COLORS)
+                       markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig2),use_container_width=True)
         fig3 = px.line(tm,x="月份",y="客资成本",color="年份",title="各年度客资成本月度趋势",
                        markers=True,color_discrete_sequence=COLORS)
