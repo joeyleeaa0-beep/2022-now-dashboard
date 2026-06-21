@@ -226,8 +226,7 @@ def metric_html(label, value, sub=""):
     return f"""<div style="background:white;border:1px solid #eef0f4;border-radius:12px;
         padding:20px 24px;box-shadow:0 1px 4px rgba(0,0,0,0.05);margin-bottom:8px;">
         <div style="color:#6b7280;font-size:13px;font-weight:500;margin-bottom:6px;">{label}</div>
-        <div style="color:#111827;font-size:26px;font-weight:700;line-height:1.2;">{value}</div>
-        {sub_html}
+        <div style="color:#111827;font-size:26px;font-weight:700;line-height:1.2;">{value}</div>{sub_html}
     </div>"""
 
 # ── 加载数据 ──
