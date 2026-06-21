@@ -332,7 +332,7 @@ with tab1:
 
 with tab2:
     st.subheader("年度数据对比")
-    df_year = apply_filter(df, sel_cities, sel_years, "全部月份")
+    df_year = apply_filter(df, sel_cities, sel_years, [])
     if not df_year.empty and "年份" in df_year.columns:
         yg = safe_agg(df_year, "年份", {
             "总花费": ("总花费","sum"),
@@ -376,7 +376,7 @@ with tab2:
 
 with tab3:
     st.subheader("月度趋势分析")
-    df_trend = apply_filter(df, sel_cities, sel_years, "全部月份")
+    df_trend = apply_filter(df, sel_cities, sel_years, [])
     if not df_trend.empty and "月份" in df_trend.columns:
         tm = safe_agg(df_trend, ["年份","月份"], {
             "客资总数": ("客资总数","sum"),
@@ -435,7 +435,7 @@ with tab4:
                 fig = px.bar(spend_df,x="渠道",y="花费",title="各渠道花费对比",
                              color="渠道",color_discrete_sequence=COLORS)
                 st.plotly_chart(make_chart(fig),use_container_width=True)
-    df_spend_trend = apply_filter(df, sel_cities, sel_years, "全部月份")
+    df_spend_trend = apply_filter(df, sel_cities, sel_years, [])
     if not df_spend_trend.empty and "年份" in df_spend_trend.columns:
         sg = df_spend_trend.groupby("年份").agg(总花费=("总花费","sum")).reset_index()
         sg["年份"] = pd.Categorical(sg["年份"], categories=YEARS, ordered=True)
