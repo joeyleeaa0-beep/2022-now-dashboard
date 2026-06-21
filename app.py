@@ -196,14 +196,14 @@ def clean_df():
         df = df[df["年份"].isin(YEARS)].copy()
     return df
 
-def apply_filter(df, cities, years, month):
+def apply_filter(df, cities, years, months):
     d = df.copy()
     if cities:
         d = d[d["城市"].isin(cities)]
     if years:
         d = d[d["年份"].isin(years)]
-    if month and "月份" in d.columns:
-        d = d[d["月份"].isin(month)]
+    if months and "月份" in d.columns:
+        d = d[d["月份"].isin(months)]
     return d
 
 def metric_html(label, value):
@@ -227,9 +227,9 @@ with st.sidebar:
     st.markdown("## 筛选条件")
     sel_cities = st.multiselect("城市（可多选）", CITIES, default=CITIES)
     sel_years = st.multiselect("年份（可多选）", YEARS, default=YEARS)
-    sel_month = st.multiselect("月份（可多选）", MONTHS, default=[])
+    sel_months = st.multiselect("月份（可多选）", MONTHS, default=[])
     st.divider()
-    df_filtered = apply_filter(df, sel_cities, sel_years, sel_month)
+    df_filtered = apply_filter(df, sel_cities, sel_years, sel_months)
     st.caption(f"当前数据：{len(df_filtered)} 条")
 
 st.markdown(f"""
@@ -238,7 +238,7 @@ st.markdown(f"""
     <p style="margin:4px 0 0 0;color:#6b7280;font-size:14px;">
         城市：{'、'.join(sel_cities) if sel_cities else '未选择'} ·
         年份：{'、'.join(sel_years) if sel_years else '未选择'} ·
-        {'、'.join(sel_month) if sel_month else '全部月份'} · 数据每60秒自动更新
+        {'、'.join(sel_months) if sel_months else '全部月份'} · 数据每60秒自动更新
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -270,8 +270,8 @@ c10.markdown(metric_html("成交率", f"{chengjiao_rate:.2f}%"), unsafe_allow_ht
 
 st.divider()
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "🏙️ 分城市", "📅 年度对比", "📈 趋势分析", "💰 花费分析", "📡 分渠道", "📋 数据明细"
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🏙️ 分城市", "📅 年度对比", "📈 趋势分析", "📡 分渠道", "📋 数据明细"
 ])
 
 with tab1:
@@ -374,6 +374,9 @@ with tab2:
         with yf:
             fig = px.line(yg,x="年份",y="总到店率%",title="各年度到店率趋势",markers=True,color_discrete_sequence=COLORS)
             st.plotly_chart(make_chart(fig),use_container_width=True)
+        fig = px.line(yg,x="年份",y="总花费",title="各年度总花费趋势",
+                      markers=True,color_discrete_sequence=COLORS)
+        st.plotly_chart(make_chart(fig),use_container_width=True)
 
 with tab3:
     st.subheader("月度趋势分析")
@@ -411,42 +414,6 @@ with tab3:
         st.plotly_chart(make_chart(fig5),use_container_width=True)
 
 with tab4:
-    st.subheader("投放花费分析")
-    spend_cols = {
-        "抖音号": "抖音号花费",
-        "信息流": "信息流花费",
-        "微信": "微信花费",
-        "小红书": "小红书花费",
-        "B站": "B站花费",
-        "快手": "快手花费",
-        "之家": "之家花费",
-    }
-    available_spend = {k: v for k, v in spend_cols.items() if v in df_filtered.columns}
-    if available_spend:
-        spend_data = {k: float(df_filtered[v].sum()) for k, v in available_spend.items()}
-        spend_df = pd.DataFrame({"渠道": list(spend_data.keys()), "花费": list(spend_data.values())})
-        spend_df = spend_df[spend_df["花费"] > 0]
-        if not spend_df.empty:
-            sa,sb = st.columns(2)
-            with sa:
-                fig = px.pie(spend_df,names="渠道",values="花费",title="各渠道花费占比",
-                             color_discrete_sequence=COLORS)
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(make_chart(fig),use_container_width=True)
-            with sb:
-                fig = px.bar(spend_df,x="渠道",y="花费",title="各渠道花费对比",
-                             color="渠道",color_discrete_sequence=COLORS)
-                st.plotly_chart(make_chart(fig),use_container_width=True)
-    df_spend_trend = apply_filter(df, sel_cities, sel_years, [])
-    if not df_spend_trend.empty and "年份" in df_spend_trend.columns:
-        sg = df_spend_trend.groupby("年份").agg(总花费=("总花费","sum")).reset_index()
-        sg["年份"] = pd.Categorical(sg["年份"], categories=YEARS, ordered=True)
-        sg = sg.sort_values("年份")
-        fig = px.line(sg,x="年份",y="总花费",title="各年度总花费趋势",
-                      markers=True,color_discrete_sequence=COLORS)
-        st.plotly_chart(make_chart(fig),use_container_width=True)
-
-with tab5:
     st.subheader("分渠道综合对比")
     channel_map = {
         "抖音号": {"花费": "抖音号花费", "客资": "抖音号客资", "成交": "抖音号成交"},
@@ -464,15 +431,12 @@ with tab5:
         成交 = float(df_filtered[cols["成交"]].sum()) if cols["成交"] and cols["成交"] in df_filtered.columns else 0
         客资成本 = round(花费 / 客资, 2) if 客资 > 0 else 0
         成交成本 = round(花费 / 成交, 2) if 成交 > 0 else 0
+        成交率 = round(成交 / 客资 * 100, 2) if 客资 > 0 else 0
         if 花费 > 0 or 客资 > 0:
             rows.append({
-                "渠道": ch,
-                "花费": round(花费, 2),
-                "客资": int(客资),
-                "客资成本": 客资成本,
-                "成交": int(成交),
-                "成交成本": 成交成本,
-                "成交率%": round(成交 / 客资 * 100, 2) if 客资 > 0 else 0,
+                "渠道": ch, "花费": round(花费, 2), "客资": int(客资),
+                "客资成本": 客资成本, "成交": int(成交),
+                "成交成本": 成交成本, "成交率%": 成交率,
             })
     if rows:
         ch_df = pd.DataFrame(rows).sort_values("花费", ascending=False)
@@ -496,7 +460,7 @@ with tab5:
                          color="渠道",color_discrete_sequence=COLORS)
             st.plotly_chart(make_chart(fig),use_container_width=True)
 
-with tab6:
+with tab5:
     st.subheader("数据明细")
     st.dataframe(df_filtered.dropna(axis=1, how='all'), use_container_width=True)
     buf = BytesIO()
