@@ -263,7 +263,7 @@ with st.sidebar:
             st.caption(f"当前数据：{len(df_filtered)} 条")
         else:
             st.markdown("## 筛选条件")
-            sel_year_budget = st.selectbox("年份", YEARS, index=YEARS.index("2026"))
+            sel_year_budget = st.selectbox("年份", ["2026"], index=0)
 
 # ── 未登录提示 ──
 if not is_authenticated:
@@ -311,7 +311,7 @@ if selected_board == "看板1：预算进度":
 
     st.markdown(f"""
     <div style="padding:8px 0 20px 0;border-bottom:1px solid #eef0f4;margin-bottom:24px;">
-        <h2 style="margin:0;color:#111827;font-weight:700;">📊 {year}年度预算执行进度</h2>
+        <h2 style="margin:0;color:#111827;font-weight:700;">📊 {year}年度 常规预算执行进度</h2>
         <p style="margin:4px 0 0 0;color:#6b7280;font-size:14px;">
             统计区间：{year}年 1月 — 12月 ｜ 单位：万元 ｜ 数据截至：{MONTHS[passed_months-1] if passed_months > 0 else "暂无"}
         </p>
