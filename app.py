@@ -477,11 +477,11 @@ with tab5:
         st.dataframe(ch_df, use_container_width=True, hide_index=True)
         ca,cb = st.columns(2)
         with ca:
-            fig = px.bar(ch_df,x="渠道",y="客资",title="各渠道客资量",
+            fig = px.bar(ch_df,x="渠道",y="花费",title="各渠道花费",
                          color="渠道",color_discrete_sequence=COLORS)
             st.plotly_chart(make_chart(fig),use_container_width=True)
         with cb:
-            fig = px.bar(ch_df,x="渠道",y="花费",title="各渠道花费",
+            fig = px.bar(ch_df,x="渠道",y="客资",title="各渠道客资量",
                          color="渠道",color_discrete_sequence=COLORS)
             st.plotly_chart(make_chart(fig),use_container_width=True)
         cc,cd = st.columns(2)
