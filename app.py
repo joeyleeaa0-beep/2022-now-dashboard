@@ -202,8 +202,8 @@ def apply_filter(df, cities, years, month):
         d = d[d["城市"].isin(cities)]
     if years:
         d = d[d["年份"].isin(years)]
-    if month != "全部月份" and "月份" in d.columns:
-        d = d[d["月份"] == month]
+    if month and "月份" in d.columns:
+        d = d[d["月份"].isin(month)]
     return d
 
 def metric_html(label, value):
@@ -227,7 +227,7 @@ with st.sidebar:
     st.markdown("## 筛选条件")
     sel_cities = st.multiselect("城市（可多选）", CITIES, default=CITIES)
     sel_years = st.multiselect("年份（可多选）", YEARS, default=YEARS)
-    sel_month = st.selectbox("月份", ["全部月份"] + MONTHS)
+    sel_month = st.multiselect("月份（可多选）", MONTHS, default=[])
     st.divider()
     df_filtered = apply_filter(df, sel_cities, sel_years, sel_month)
     st.caption(f"当前数据：{len(df_filtered)} 条")
@@ -238,7 +238,7 @@ st.markdown(f"""
     <p style="margin:4px 0 0 0;color:#6b7280;font-size:14px;">
         城市：{'、'.join(sel_cities) if sel_cities else '未选择'} ·
         年份：{'、'.join(sel_years) if sel_years else '未选择'} ·
-        {sel_month} · 数据每60秒自动更新
+        {'、'.join(sel_month) if sel_month else '全部月份'} · 数据每60秒自动更新
     </p>
 </div>
 """, unsafe_allow_html=True)
