@@ -386,19 +386,19 @@ with tab3:
         })
         tm["月份"] = pd.Categorical(tm["月份"], categories=MONTHS, ordered=True)
         tm = tm.sort_values(["年份","月份"])
-        fig = px.line(tm,x="月份",y="客资总数",color="年份",title="各年度客资量月度趋势",
-                      markers=True,color_discrete_sequence=COLORS)
-        st.plotly_chart(make_chart(fig),use_container_width=True)
-        fig2 = px.line(tm,x="月份",y="销收成交总量",color="年份",title="各年度成交量月度趋势",
+        fig1 = px.line(tm,x="月份",y="总花费",color="年份",title="各年度花费月度趋势",
                        markers=True,color_discrete_sequence=COLORS)
+        st.plotly_chart(make_chart(fig1),use_container_width=True)
+        fig2 = px.line(tm,x="月份",y="客资总数",color="年份",title="各年度客资量月度趋势",
+                      markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig2),use_container_width=True)
-        fig3 = px.line(tm,x="月份",y="总到店率%",color="年份",title="各年度到店率月度趋势",
+        fig3 = px.line(tm,x="月份",y="客资成本",color="年份",title="各年度客资成本月度趋势",
                        markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig3),use_container_width=True)
-        fig4 = px.line(tm,x="月份",y="客资成本",color="年份",title="各年度客资成本月度趋势",
+        fig4 = px.line(tm,x="月份",y="总到店率%",color="年份",title="各年度到店率月度趋势",
                        markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig4),use_container_width=True)
-        fig5 = px.line(tm,x="月份",y="总花费",color="年份",title="各年度花费月度趋势",
+        fig5 = px.line(tm,x="月份",y="销收成交总量",color="年份",title="各年度成交量月度趋势",
                        markers=True,color_discrete_sequence=COLORS)
         st.plotly_chart(make_chart(fig5),use_container_width=True)
 
