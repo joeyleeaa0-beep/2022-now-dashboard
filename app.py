@@ -8,6 +8,16 @@ import matplotlib.font_manager as fm
 from io import BytesIO
 import datetime
 import os
+import threading
+from pathlib import Path
+
+from data_cache import (
+    FeishuAPIError,
+    MonthlyQuotaExceeded,
+    load_snapshot,
+    load_with_fallback,
+    parse_feishu_response,
+)
 
 st.set_page_config(page_title="AKD数据看板", page_icon="📊", layout="wide")
 
@@ -55,6 +65,10 @@ PASSWORDS = {
     "看板2：新媒体数据": "akdxmt",
 }
 
+# 最近一次成功数据会同时保存在内存和本地文件中。页面重跑不会请求飞书，
+# 每个浏览器会话只有在首次通过密码验证时才刷新一次。
+DATA_CACHE_PATH = Path(__file__).with_name(".last_successful_data.pkl")
+
 @st.cache_resource
 def setup_chinese_font():
     font_path = "/tmp/NotoSansSC.ttf"
@@ -82,13 +96,18 @@ def setup_chinese_font():
 
 CHINESE_FONT_NAME, CHINESE_FONT_PATH = setup_chinese_font()
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=5400)
 def get_token():
     res = requests.post(
         "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
-        json={"app_id": APP_ID, "app_secret": APP_SECRET}
+        json={"app_id": APP_ID, "app_secret": APP_SECRET},
+        timeout=20,
     )
-    return res.json().get("tenant_access_token")
+    payload = parse_feishu_response(res, "获取访问凭证")
+    token = payload.get("tenant_access_token")
+    if not token:
+        raise FeishuAPIError("飞书没有返回 tenant_access_token")
+    return token
 
 def extract_text(val):
     if val is None:
@@ -111,16 +130,21 @@ def extract_value(val):
         return 0
     return s
 
-@st.cache_data(ttl=60)
 def read_sheet():
     token = get_token()
     headers = {"Authorization": f"Bearer {token}"}
     url = (
         f"https://open.feishu.cn/open-apis/sheets/v2/spreadsheets/{SPREADSHEET_TOKEN}"
-        f"/values/{SHEET_ID}!A1:AQ2000?renderType=FORMATTED_VALUE"
+        f"/values/{SHEET_ID}!A1:AQ2000"
     )
-    res = requests.get(url, headers=headers).json()
-    values = res.get("data", {}).get("valueRange", {}).get("values", [])
+    response = requests.get(
+        url,
+        headers=headers,
+        params={"valueRenderOption": "FormattedValue"},
+        timeout=30,
+    )
+    payload = parse_feishu_response(response, "读取电子表格")
+    values = payload.get("data", {}).get("valueRange", {}).get("values", [])
     if not values or len(values) < 2:
         return pd.DataFrame()
     headers_row = [
@@ -189,7 +213,6 @@ def safe_agg(df, group_col, agg_dict):
         g.loc[mask, "收购线索成交率%"] = (g.loc[mask, "收购成交"] / g.loc[mask, "收购客资"] * 100).round(2)
     return g
 
-@st.cache_data(ttl=60)
 def clean_df():
     df = read_sheet()
     if df.empty:
@@ -211,6 +234,49 @@ def clean_df():
         df = df[df["年份"].isin(YEARS)].copy()
     return df
 
+
+@st.cache_resource
+def get_shared_data_cache():
+    dataframe, updated_at = load_snapshot(DATA_CACHE_PATH)
+    return {
+        "dataframe": dataframe,
+        "updated_at": updated_at,
+        "lock": threading.Lock(),
+    }
+
+
+def load_data_once_per_session():
+    if "dashboard_data" in st.session_state:
+        return (
+            st.session_state.dashboard_data,
+            st.session_state.dashboard_data_source,
+            st.session_state.dashboard_data_updated_at,
+            st.session_state.get("dashboard_data_error"),
+        )
+
+    shared_cache = get_shared_data_cache()
+    with shared_cache["lock"]:
+        result = load_with_fallback(
+            clean_df,
+            DATA_CACHE_PATH,
+            shared_cache["dataframe"],
+            shared_cache["updated_at"],
+        )
+        if result.source == "live":
+            shared_cache["dataframe"] = result.dataframe.copy()
+            shared_cache["updated_at"] = result.updated_at
+
+    st.session_state.dashboard_data = result.dataframe
+    st.session_state.dashboard_data_source = result.source
+    st.session_state.dashboard_data_updated_at = result.updated_at
+    st.session_state.dashboard_data_error = str(result.error) if result.error else None
+    return (
+        result.dataframe,
+        result.source,
+        result.updated_at,
+        st.session_state.dashboard_data_error,
+    )
+
 def apply_filter(df, cities, years, months):
     d = df.copy()
     if cities:
@@ -229,17 +295,6 @@ def metric_html(label, value, sub=""):
         <div style="color:#111827;font-size:26px;font-weight:700;line-height:1.2;">{value}</div>{sub_html}
     </div>"""
 
-# ── 加载数据 ──
-with st.spinner("正在加载数据..."):
-    try:
-        df = clean_df()
-        if df.empty:
-            st.error("数据加载失败或表格为空")
-            st.stop()
-    except Exception as e:
-        st.error(f"加载失败：{e}")
-        st.stop()
-
 # ── 侧边栏：看板选择 + 密码 ──
 with st.sidebar:
     st.markdown("## 选择看板")
@@ -252,19 +307,6 @@ with st.sidebar:
 
     st.divider()
 
-    if is_authenticated:
-        if selected_board == "看板2：新媒体数据":
-            st.markdown("## 筛选条件")
-            sel_cities = st.multiselect("城市（可多选）", CITIES, default=CITIES)
-            sel_years = st.multiselect("年份（可多选）", YEARS, default=YEARS)
-            sel_months = st.multiselect("月份（可多选）", MONTHS, default=[])
-            st.divider()
-            df_filtered = apply_filter(df, sel_cities, sel_years, sel_months)
-            st.caption(f"当前数据：{len(df_filtered)} 条")
-        else:
-            st.markdown("## 筛选条件")
-            sel_year_budget = st.selectbox("年份", ["2026"], index=0)
-
 # ── 未登录提示 ──
 if not is_authenticated:
     st.markdown("""
@@ -275,6 +317,37 @@ if not is_authenticated:
     </div>
     """, unsafe_allow_html=True)
     st.stop()
+
+# ── 每个已登录浏览器会话只加载一次数据 ──
+with st.spinner("正在加载数据..."):
+    try:
+        df, data_source, data_updated_at, data_error = load_data_once_per_session()
+    except MonthlyQuotaExceeded:
+        st.error("飞书 API 月度额度已耗尽，且暂时没有可用的历史数据缓存。")
+        st.stop()
+    except Exception as e:
+        st.error(f"数据加载失败：{e}")
+        st.stop()
+
+if data_source == "cache":
+    updated_text = data_updated_at or "未知时间"
+    st.warning(
+        f"飞书暂时无法更新，当前展示最后一次成功数据（更新时间：{updated_text}）。"
+    )
+
+# ── 数据加载完成后再渲染筛选器 ──
+with st.sidebar:
+    if selected_board == "看板2：新媒体数据":
+        st.markdown("## 筛选条件")
+        sel_cities = st.multiselect("城市（可多选）", CITIES, default=CITIES)
+        sel_years = st.multiselect("年份（可多选）", YEARS, default=YEARS)
+        sel_months = st.multiselect("月份（可多选）", MONTHS, default=[])
+        st.divider()
+        df_filtered = apply_filter(df, sel_cities, sel_years, sel_months)
+        st.caption(f"当前数据：{len(df_filtered)} 条")
+    else:
+        st.markdown("## 筛选条件")
+        sel_year_budget = st.selectbox("年份", ["2026"], index=0)
 
 # ══════════════════════════════════════
 # 看板1：预算进度
