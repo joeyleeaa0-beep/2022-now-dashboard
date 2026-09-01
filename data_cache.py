@@ -4,6 +4,7 @@ import pickle
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -76,7 +77,9 @@ def load_with_fallback(
         dataframe = fetch_data()
         if dataframe.empty:
             raise FeishuAPIError("飞书表格没有返回数据")
-        updated_at = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+        updated_at = datetime.datetime.now(ZoneInfo("Asia/Shanghai")).isoformat(
+            timespec="seconds"
+        )
         snapshot_error = None
         try:
             save_snapshot(cache_path, dataframe, updated_at)
