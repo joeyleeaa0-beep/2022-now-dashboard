@@ -335,6 +335,10 @@ if data_source == "cache":
         f"飞书暂时无法更新，当前展示最后一次成功数据（更新时间：{updated_text}）。"
     )
 
+display_updated_at = (
+    data_updated_at.replace("T", " ")[:19] if data_updated_at else "未知时间"
+)
+
 # ── 数据加载完成后再渲染筛选器 ──
 with st.sidebar:
     if selected_board == "看板2：新媒体数据":
@@ -517,7 +521,8 @@ else:
         <p style="margin:4px 0 0 0;color:#6b7280;font-size:14px;">
             城市：{'、'.join(sel_cities) if sel_cities else '未选择'} ·
             年份：{'、'.join(sel_years) if sel_years else '未选择'} ·
-            {'、'.join(sel_months) if sel_months else '全部月份'} · 数据每60秒自动更新
+            {'、'.join(sel_months) if sel_months else '全部月份'} ·
+            每次打开看板时更新一次 · 数据时间：{display_updated_at}
         </p>
     </div>
     """, unsafe_allow_html=True)
