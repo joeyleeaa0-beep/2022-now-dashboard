@@ -23,7 +23,6 @@ st.set_page_config(page_title="AKD数据看板", page_icon="📊", layout="wide"
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&display=swap');
     :root {
         --lime: #dcef4e;
         --lime-soft: #ecf7a3;
@@ -31,6 +30,12 @@ st.markdown("""
         --ink-2: #6f6f68;
         --line: #e6e6e0;
         --bg: #ececea;
+        --sans: 'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans SC',
+                'Helvetica Neue',Arial,sans-serif;
+    }
+    html, body, [class*="st-"], .stApp, button, input, select, textarea {
+        font-family: var(--sans) !important;
+        -webkit-font-smoothing: antialiased;
     }
     .stApp { background-color: var(--bg); }
     #MainMenu, footer { visibility: hidden; }
@@ -38,7 +43,7 @@ st.markdown("""
 
     /* 侧边栏 */
     [data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid var(--line); }
-    [data-testid="stSidebar"] * { color: var(--ink); }
+    [data-testid="stSidebar"] * { color: var(--ink); font-family: var(--sans); }
 
     /* Tabs：lime 胶囊选中态 */
     .stTabs [data-baseweb="tab-list"] { gap: 6px; background: transparent; border-bottom: 1px solid var(--line); }
@@ -52,6 +57,7 @@ st.markdown("""
     }
     .stTabs [data-baseweb="tab-highlight"] { display: none; }
     .stTabs [data-baseweb="tab-border"] { display: none; }
+    .stTabs [data-baseweb="tab"] p { font-size: 13px !important; font-weight: inherit; margin: 0; }
 
     /* 折叠区 / 表格容器白卡化 */
     [data-testid="stExpander"] {
@@ -65,6 +71,11 @@ st.markdown("""
     }
     div[data-testid="stDownloadButton"] button:hover { border-color: var(--lime); background: #fafce2; }
     hr { border-color: var(--line); }
+
+    /* 标题层级统一 */
+    h1 { font-size: 26px !important; font-weight: 700 !important; letter-spacing: -.01em; }
+    h2 { font-size: 22px !important; font-weight: 700 !important; }
+    h3, [data-testid="stHeadingWithActionElements"] h3 { font-size: 16px !important; font-weight: 600 !important; }
 
     /* 通用小节标题：中文 + 英文小注 */
     .mini-label { font-size: 11px; letter-spacing: .14em; color: var(--ink-2);
@@ -355,20 +366,34 @@ def apply_filter(df, cities, years, months):
     return d
 
 def metric_html(label, value, sub="", en=""):
-    """设计风格：白卡 + 小标签（中/英文小注）+ 衬线大数字 + lime 进度点。"""
-    en_html = f'<span style="font-size:10px;letter-spacing:.14em;color:#9a9a92;font-weight:600;text-transform:uppercase;">{en}</span>' if en else ""
+    """设计风格：白卡 + 小标签（中/英文小注）+ 大数字。
+
+    字体统一说明：数字用西文衬线体 + 中文黑体 fallback，并锁定字号 / 字重 / 行高，
+    避免不同指标之间出现大小不一。中文标签也统一 13px / 600，不做 flex 压缩。
+    """
+    en_html = (
+        f'<span style="font-family:\'Helvetica Neue\',Arial,sans-serif;font-size:10px;'
+        f'letter-spacing:.14em;color:#9a9a92;font-weight:600;text-transform:uppercase;'
+        f'white-space:nowrap;flex:0 0 auto;">{en}</span>'
+        if en else ""
+    )
     sub_html = (
         f'<div style="margin-top:10px;"><span style="background:#f4f9c8;color:#5c6b0e;'
-        f'font-size:11px;font-weight:600;border-radius:999px;padding:3px 10px;">{sub}</span></div>'
+        f'font-family:\'Helvetica Neue\',Arial,sans-serif;font-size:11px;font-weight:600;'
+        f'border-radius:999px;padding:3px 10px;white-space:nowrap;">{sub}</span></div>'
         if sub else ""
     )
     return f"""<div style="background:#ffffff;border:1px solid #e6e6e0;border-radius:16px;
         padding:18px 22px;margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div style="color:#1c1c1a;font-size:13px;font-weight:600;">{label}</div>{en_html}
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+            <div style="color:#1c1c1a;font-family:'PingFang SC','Hiragino Sans GB',
+                'Microsoft YaHei','Noto Sans SC',sans-serif;font-size:13px;font-weight:600;
+                line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{label}</div>{en_html}
         </div>
-        <div style="color:#1c1c1a;font-family:Georgia,'Noto Serif SC',serif;
-            font-size:30px;font-weight:700;line-height:1.25;margin-top:6px;">{value}</div>{sub_html}
+        <div style="color:#1c1c1a;font-family:'Helvetica Neue',Arial,'PingFang SC',
+            'Microsoft YaHei','Noto Sans SC',sans-serif;font-size:29px;font-weight:700;
+            line-height:1.2;margin-top:6px;letter-spacing:-.01em;
+            font-variant-numeric:tabular-nums;white-space:nowrap;">{value}</div>{sub_html}
     </div>"""
 
 # ── 侧边栏：看板选择 + 密码 ──
@@ -535,8 +560,8 @@ if selected_board == "看板1：预算进度":
     <div style="padding:4px 0 20px 0;margin-bottom:18px;">
         <div style="display:flex;align-items:center;gap:12px;">
             <span style="width:22px;height:22px;border-radius:7px;background:#dcef4e;display:inline-block;"></span>
-            <h2 style="margin:0;color:#1c1c1a;font-weight:700;font-size:26px;letter-spacing:-.01em;">{year}年度 常规预算执行进度</h2>
-            <span style="font-size:11px;letter-spacing:.14em;color:#9a9a92;font-weight:600;">BUDGET · PROGRESS</span>
+            <h2 style="margin:0;color:#1c1c1a;font-weight:700;font-size:24px;letter-spacing:-.01em;white-space:nowrap;">{year}年度 常规预算执行进度</h2>
+            <span style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;letter-spacing:.14em;color:#9a9a92;font-weight:600;white-space:nowrap;">BUDGET · PROGRESS</span>
         </div>
         <p style="margin:8px 0 0 34px;color:#6f6f68;font-size:13px;">
             统计区间：{year}年 1月 — 12月 ｜ 单位：万元 ｜ 数据截至：{MONTHS[passed_months-1] if passed_months > 0 else "暂无"}
@@ -672,8 +697,8 @@ else:
     <div style="padding:4px 0 16px 0;margin-bottom:14px;">
         <div style="display:flex;align-items:center;gap:12px;">
             <span style="width:22px;height:22px;border-radius:7px;background:#dcef4e;display:inline-block;"></span>
-            <h2 style="margin:0;color:#1c1c1a;font-weight:700;font-size:26px;letter-spacing:-.01em;">新媒体年度数据看板</h2>
-            <span style="font-size:11px;letter-spacing:.14em;color:#9a9a92;font-weight:600;">ANALYTICS · OVERVIEW</span>
+            <h2 style="margin:0;color:#1c1c1a;font-weight:700;font-size:24px;letter-spacing:-.01em;white-space:nowrap;">新媒体年度数据看板</h2>
+            <span style="font-family:'Helvetica Neue',Arial,sans-serif;font-size:11px;letter-spacing:.14em;color:#9a9a92;font-weight:600;white-space:nowrap;">ANALYTICS · OVERVIEW</span>
         </div>
         <p style="margin:8px 0 0 34px;color:#6f6f68;font-size:13px;">
             城市：{'、'.join(sel_cities) if sel_cities else '未选择'} ·
