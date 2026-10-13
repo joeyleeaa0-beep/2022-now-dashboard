@@ -368,18 +368,41 @@ display_updated_at = (
 )
 
 
-def freshness_badge(source, updated_text):
-    """顶部数据新鲜度徽章：区分实时 / 缓存，并标注更新时间。"""
+def latest_data_month(frame):
+    """取当前数据中最新的「年-月」作为覆盖月份上界（如 2026-09）。"""
+    if frame is None or frame.empty or "年份" not in frame.columns or "月份" not in frame.columns:
+        return None
+    try:
+        ym = frame.dropna(subset=["年份", "月份"]).copy()
+        ym["_y"] = ym["年份"].astype(str).str.replace("年", "", regex=False).str.strip()
+        ym["_m"] = ym["月份"].astype(str).str.replace("月", "", regex=False).str.strip()
+        ym = ym[ym["_y"].str.fullmatch(r"\d{4}") & ym["_m"].str.fullmatch(r"\d{1,2}")]
+        if ym.empty:
+            return None
+        key = ym["_y"] + "-" + ym["_m"].str.zfill(2)
+        return str(key.max())
+    except Exception:
+        return None
+
+
+def freshness_badge(source, updated_text, covered_text=None):
+    """顶部数据新鲜度徽章：区分实时 / 缓存，并标注更新时间与数据覆盖月份。"""
     if source == "live":
         dot, color, bg, border, label = "🟢", "#15803d", "#f0fdf4", "#86efac", "实时数据"
     else:
         dot, color, bg, border, label = "🟠", "#b45309", "#fffbeb", "#fcd34d", "缓存数据"
+    covered = (
+        f'<span style="color:#6b7280;">｜</span>'
+        f'<span>数据覆盖月份：<b>截止 {covered_text}</b></span>'
+        if covered_text else ""
+    )
     return f"""<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;
         background:{bg};border:1px solid {border};border-radius:10px;
         padding:10px 16px;margin-bottom:16px;font-size:13px;color:{color};">
         <span style="font-weight:600;">{dot} {label}</span>
         <span style="color:#6b7280;">｜</span>
-        <span>数据时间：<b>{updated_text}</b></span>
+        <span>数据抓取时间：<b>{updated_text}</b></span>
+        {covered}
     </div>"""
 
 
@@ -602,7 +625,11 @@ else:
     """, unsafe_allow_html=True)
 
     # 数据新鲜度徽章
-    st.markdown(freshness_badge(data_source, display_updated_at), unsafe_allow_html=True)
+    _covered_month = latest_data_month(df_filtered)
+    st.markdown(
+        freshness_badge(data_source, display_updated_at, _covered_month),
+        unsafe_allow_html=True,
+    )
 
     total_spend     = df_filtered["总花费"].sum() if "总花费" in df_filtered.columns else 0
     total_keizi     = df_filtered["客资总数"].sum() if "客资总数" in df_filtered.columns else 0
