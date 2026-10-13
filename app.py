@@ -169,6 +169,12 @@ def make_chart(fig):
     fig.update_layout(**PLOTLY_LAYOUT)
     return fig
 
+def _to_excel_bytes(df):
+    buf = BytesIO()
+    df.to_excel(buf, index=False, engine="xlsxwriter")
+    buf.seek(0)
+    return buf
+
 def safe_agg(df, group_col, agg_dict):
     g = df.groupby(group_col).agg(**agg_dict).reset_index()
     if "总花费" in g.columns and "客资总数" in g.columns:
@@ -700,19 +706,27 @@ else:
     with tab4:
         st.subheader("分渠道综合对比")
         channel_map = {
-            "抖音号": {"花费": "抖音号花费", "客资": "抖音号客资", "成交": "抖音号成交"},
-            "信息流": {"花费": "信息流花费", "客资": "信息流客资", "成交": "信息流成交"},
-            "微信":   {"花费": "微信花费",   "客资": "微信客资",   "成交": "微信成交"},
-            "小红书": {"花费": "小红书花费", "客资": "小红书客资", "成交": "小红书成交"},
-            "B站":    {"花费": "B站花费",    "客资": "b站客资",    "成交": "b站成交"},
-            "快手":   {"花费": "快手花费",   "客资": "快手客资",   "成交": "快手成交"},
-            "之家":   {"花费": "之家花费",   "客资": "之家客资",   "成交": "之家成交"},
+            "抖音号": {"花费": "抖音号花费", "客资": "抖音号客资", "成交": "抖音号成交", "到店": "抖音号到店"},
+            "信息流": {"花费": "信息流花费", "客资": "信息流客资", "成交": "信息流成交", "到店": "信息流到店"},
+            "微信":   {"花费": "微信花费",   "客资": "微信客资",   "成交": "微信成交",   "到店": "微信到店"},
+            "小红书": {"花费": "小红书花费", "客资": "小红书客资", "成交": "小红书成交", "到店": "小红书到店"},
+            "B站":    {"花费": "B站花费",    "客资": "b站客资",    "成交": "b站成交",    "到店": "b站到店"},
+            "快手":   {"花费": "快手花费",   "客资": "快手客资",   "成交": "快手成交",   "到店": "快手到店"},
+            "之家":   {"花费": "之家花费",   "客资": "之家客资",   "成交": "之家成交",   "到店": "之家到店"},
         }
+
+        def find_col(df_, name):
+            # 大小写不敏感地匹配列名（源表中 B站 等列大小写历史上不统一）
+            lowered = {c.lower(): c for c in df_.columns}
+            return lowered.get(name.lower())
         rows = []
         for ch, cols in channel_map.items():
-            花费 = float(df_filtered[cols["花费"]].sum()) if cols["花费"] and cols["花费"] in df_filtered.columns else 0
-            客资 = float(df_filtered[cols["客资"]].sum()) if cols["客资"] and cols["客资"] in df_filtered.columns else 0
-            成交 = float(df_filtered[cols["成交"]].sum()) if cols["成交"] and cols["成交"] in df_filtered.columns else 0
+            spend_col = find_col(df_filtered, cols["花费"])
+            keizi_col = find_col(df_filtered, cols["客资"])
+            deal_col = find_col(df_filtered, cols["成交"])
+            花费 = float(df_filtered[spend_col].sum()) if spend_col else 0
+            客资 = float(df_filtered[keizi_col].sum()) if keizi_col else 0
+            成交 = float(df_filtered[deal_col].sum()) if deal_col else 0
             客资成本 = round(花费 / 客资, 2) if 客资 > 0 else 0
             成交成本 = round(花费 / 成交, 2) if 成交 > 0 else 0
             成交率 = round(成交 / 客资 * 100, 2) if 客资 > 0 else 0
@@ -743,6 +757,69 @@ else:
                 fig = px.bar(ch_df,x="渠道",y="成交成本",title="各渠道成交成本",
                              color="渠道",color_discrete_sequence=COLORS)
                 st.plotly_chart(make_chart(fig),use_container_width=True)
+
+        # ── 分渠道 × 分地区 × 分月明细 ──
+        # 说明：受「城市 / 年份 / 月份」筛选控制，按所选范围展示各渠道分月数据；
+        # 比率类字段在分母为 0（无客资 / 无成交）时显示「—」，以区分“真实为 0”与“无法计算”。
+        st.divider()
+        st.subheader("分渠道 × 分地区 × 分月明细")
+        if sel_months:
+            st.info(f"💡 本表按当前筛选显示（城市 / 年份 / 月份：{'、'.join(sel_months)}）")
+        else:
+            st.info("💡 本表按当前筛选显示；未选月份时展示各渠道分月完整走势")
+
+        df_ch_month = apply_filter(df, sel_cities, sel_years, sel_months)
+        ch_rows = []
+        if not df_ch_month.empty and "城市" in df_ch_month.columns and "月份" in df_ch_month.columns:
+            for ch, cols in channel_map.items():
+                spend_col = find_col(df_ch_month, cols["花费"])
+                keizi_col = find_col(df_ch_month, cols["客资"])
+                deal_col = find_col(df_ch_month, cols["成交"])
+                daodian_col = find_col(df_ch_month, cols["到店"])
+                if not spend_col or not keizi_col:
+                    continue
+                for city in sel_cities:
+                    city_df = df_ch_month[df_ch_month["城市"] == city]
+                    if city_df.empty:
+                        continue
+                    for m in MONTHS:
+                        month_df = city_df[city_df["月份"] == m]
+                        if month_df.empty:
+                            continue
+                        花费 = float(month_df[spend_col].sum()) if spend_col else 0
+                        客资 = float(month_df[keizi_col].sum()) if keizi_col else 0
+                        成交 = float(month_df[deal_col].sum()) if deal_col else 0
+                        到店 = float(month_df[daodian_col].sum()) if daodian_col else 0
+                        # 四项全为 0 的空行跳过（保留任一非零值的行）
+                        if 花费 == 0 and 客资 == 0 and 成交 == 0 and 到店 == 0:
+                            continue
+                        ch_rows.append({
+                            "地区": city,
+                            "渠道": ch,
+                            "月份": m,
+                            "花费": round(花费, 2),
+                            "客资量": int(客资),
+                            "客资成本": round(花费 / 客资, 2) if 客资 > 0 else "—",
+                            "到店量": int(到店),
+                            "到店率%": round(到店 / 客资 * 100, 2) if 客资 > 0 else "—",
+                            "成交量": int(成交),
+                            "客资成交率%": round(成交 / 客资 * 100, 2) if 客资 > 0 else "—",
+                            "成交成本": round(花费 / 成交, 2) if 成交 > 0 else "—",
+                        })
+        if ch_rows:
+            chm_df = pd.DataFrame(ch_rows)
+            chm_df["月份"] = pd.Categorical(chm_df["月份"], categories=MONTHS, ordered=True)
+            chm_df["地区"] = pd.Categorical(chm_df["地区"], categories=CITIES, ordered=True)
+            chm_df = chm_df.sort_values(["地区", "渠道", "月份"]).reset_index(drop=True)
+            st.dataframe(chm_df, use_container_width=True, hide_index=True)
+            st.download_button(
+                label="⬇️ 导出分渠道分月明细 Excel",
+                data=_to_excel_bytes(chm_df),
+                file_name=f"分渠道分月明细_{datetime.datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        else:
+            st.caption("当前筛选条件下暂无分渠道分月数据（请检查城市 / 年份筛选，或源表是否包含渠道列）。")
 
     with tab5:
         st.subheader("数据明细")
