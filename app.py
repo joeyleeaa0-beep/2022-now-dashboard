@@ -615,23 +615,24 @@ else:
     daodian_rate    = total_daodian / total_keizi * 100 if total_keizi > 0 else 0
     chengjiao_rate  = total_chengjiao / total_keizi * 100 if total_keizi > 0 else 0
 
-    # ── 核心指标（首屏 4 个）──
-    c1,c2,c3,c4 = st.columns(4)
-    c1.markdown(metric_html("总花费", f"¥{total_spend:,.0f}"), unsafe_allow_html=True)
-    c2.markdown(metric_html("总客资量", f"{int(total_keizi):,}"), unsafe_allow_html=True)
-    c3.markdown(metric_html("总成交量", f"{int(total_chengjiao):,}"), unsafe_allow_html=True)
-    c4.markdown(metric_html("成交成本", f"¥{chengjiao_cost:.2f}"), unsafe_allow_html=True)
+    daodian_cost    = total_spend / total_daodian if total_daodian > 0 else 0
 
-    # ── 更多指标（折叠区，6 个）──
-    with st.expander("📂 更多指标（到店 / 客资成本 / 成交结构 / 转化率）", expanded=False):
-        d1,d2,d3 = st.columns(3)
-        d1.markdown(metric_html("到店总量", f"{int(total_daodian):,}"), unsafe_allow_html=True)
-        d2.markdown(metric_html("客资成本", f"¥{keizi_cost:.2f}"), unsafe_allow_html=True)
-        d3.markdown(metric_html("到店率", f"{daodian_rate:.2f}%"), unsafe_allow_html=True)
-        d4,d5,d6 = st.columns(3)
-        d4.markdown(metric_html("销售成交", f"{int(total_xiaoshou):,}"), unsafe_allow_html=True)
-        d5.markdown(metric_html("收购成交", f"{int(total_shougou):,}"), unsafe_allow_html=True)
-        d6.markdown(metric_html("成交率", f"{chengjiao_rate:.2f}%"), unsafe_allow_html=True)
+    # ── 指标卡三排布局：花费 / 到店 / 成交 ──
+    r1a,r1b,r1c = st.columns(3)
+    r1a.markdown(metric_html("总花费", f"¥{total_spend:,.0f}"), unsafe_allow_html=True)
+    r1b.markdown(metric_html("总客资量", f"{int(total_keizi):,}"), unsafe_allow_html=True)
+    r1c.markdown(metric_html("客资成本", f"¥{keizi_cost:.2f}"), unsafe_allow_html=True)
+
+    r2a,r2b,r2c = st.columns(3)
+    r2a.markdown(metric_html("到店总量", f"{int(total_daodian):,}"), unsafe_allow_html=True)
+    r2b.markdown(metric_html("到店成本", f"¥{daodian_cost:.2f}"), unsafe_allow_html=True)
+    r2c.markdown(metric_html("客资到店率", f"{daodian_rate:.2f}%"), unsafe_allow_html=True)
+
+    r3a,r3b,r3c,r3d = st.columns(4)
+    r3a.markdown(metric_html("总成交量", f"{int(total_chengjiao):,}"), unsafe_allow_html=True)
+    r3b.markdown(metric_html("销售成交", f"{int(total_xiaoshou):,}"), unsafe_allow_html=True)
+    r3c.markdown(metric_html("收购成交", f"{int(total_shougou):,}"), unsafe_allow_html=True)
+    r3d.markdown(metric_html("客资成交率", f"{chengjiao_rate:.2f}%"), unsafe_allow_html=True)
 
     st.divider()
 
