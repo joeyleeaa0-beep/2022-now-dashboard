@@ -23,13 +23,52 @@ st.set_page_config(page_title="AKD数据看板", page_icon="📊", layout="wide"
 
 st.markdown("""
 <style>
-    .stApp { background-color: #f8f9fc; }
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&display=swap');
+    :root {
+        --lime: #dcef4e;
+        --lime-soft: #ecf7a3;
+        --ink: #1c1c1a;
+        --ink-2: #6f6f68;
+        --line: #e6e6e0;
+        --bg: #ececea;
+    }
+    .stApp { background-color: var(--bg); }
     #MainMenu, footer { visibility: hidden; }
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; background: transparent; border-bottom: 1px solid #eef0f4; }
-    .stTabs [data-baseweb="tab"] { background: transparent; color: #6b7280; font-weight: 500; border-radius: 6px 6px 0 0; padding: 8px 18px; }
-    .stTabs [aria-selected="true"] { background: white !important; color: #111827 !important; border-bottom: 2px solid #4f46e5 !important; }
-    [data-testid="stSidebar"] { background: white; border-right: 1px solid #eef0f4; }
-    hr { border-color: #eef0f4; }
+    .block-container { padding-top: 2.2rem; }
+
+    /* 侧边栏 */
+    [data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid var(--line); }
+    [data-testid="stSidebar"] * { color: var(--ink); }
+
+    /* Tabs：lime 胶囊选中态 */
+    .stTabs [data-baseweb="tab-list"] { gap: 6px; background: transparent; border-bottom: 1px solid var(--line); }
+    .stTabs [data-baseweb="tab"] {
+        background: transparent; color: var(--ink-2); font-weight: 500;
+        border-radius: 999px; padding: 6px 16px; font-size: 13px;
+    }
+    .stTabs [aria-selected="true"] {
+        background: var(--lime) !important; color: var(--ink) !important;
+        border-bottom: none !important; font-weight: 600;
+    }
+    .stTabs [data-baseweb="tab-highlight"] { display: none; }
+    .stTabs [data-baseweb="tab-border"] { display: none; }
+
+    /* 折叠区 / 表格容器白卡化 */
+    [data-testid="stExpander"] {
+        background: #ffffff; border: 1px solid var(--line) !important;
+        border-radius: 14px !important; overflow: hidden;
+    }
+    [data-testid="stDataFrame"] { border: 1px solid var(--line); border-radius: 12px; }
+    div[data-testid="stDownloadButton"] button {
+        background: #ffffff; color: var(--ink); border: 1px solid var(--line);
+        border-radius: 999px; font-weight: 500; padding: 6px 18px;
+    }
+    div[data-testid="stDownloadButton"] button:hover { border-color: var(--lime); background: #fafce2; }
+    hr { border-color: var(--line); }
+
+    /* 通用小节标题：中文 + 英文小注 */
+    .mini-label { font-size: 11px; letter-spacing: .14em; color: var(--ink-2);
+        text-transform: uppercase; font-weight: 600; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -41,14 +80,14 @@ SHEET_ID = "0piesb"
 YEARS = ["2022", "2023", "2024", "2025", "2026"]
 MONTHS = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"]
 CITIES = ["深圳", "上海", "成都", "天津"]
-COLORS = ["#4f46e5","#06b6d4","#10b981","#f59e0b","#ef4444","#8b5cf6"]
+COLORS = ["#dcef4e","#a8bf2a","#7c941a","#4f6610","#3f3f3a","#b5b5ae","#8a8a82"]
 PLOTLY_LAYOUT = dict(
     paper_bgcolor="white", plot_bgcolor="white",
-    font=dict(family="sans-serif", size=12, color="#374151"),
+    font=dict(family="sans-serif", size=12, color="#4a4a44"),
     margin=dict(l=16, r=16, t=48, b=16),
     legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="center", x=0.5, font=dict(size=11)),
-    xaxis=dict(showgrid=False, linecolor="#eef0f4"),
-    yaxis=dict(gridcolor="#f3f4f6", linecolor="#eef0f4"),
+    xaxis=dict(showgrid=False, linecolor="#e6e6e0"),
+    yaxis=dict(gridcolor="#f1f1ec", linecolor="#e6e6e0"),
 )
 
 # ── 年度预算配置（手动填写，单位：元）──
@@ -315,12 +354,21 @@ def apply_filter(df, cities, years, months):
         d = d[d["月份"].isin(months)]
     return d
 
-def metric_html(label, value, sub=""):
-    sub_html = f'<div style="color:#9ca3af;font-size:12px;margin-top:4px;">{sub}</div>' if sub else ""
-    return f"""<div style="background:white;border:1px solid #eef0f4;border-radius:12px;
-        padding:20px 24px;box-shadow:0 1px 4px rgba(0,0,0,0.05);margin-bottom:8px;">
-        <div style="color:#6b7280;font-size:13px;font-weight:500;margin-bottom:6px;">{label}</div>
-        <div style="color:#111827;font-size:26px;font-weight:700;line-height:1.2;">{value}</div>{sub_html}
+def metric_html(label, value, sub="", en=""):
+    """设计风格：白卡 + 小标签（中/英文小注）+ 衬线大数字 + lime 进度点。"""
+    en_html = f'<span style="font-size:10px;letter-spacing:.14em;color:#9a9a92;font-weight:600;text-transform:uppercase;">{en}</span>' if en else ""
+    sub_html = (
+        f'<div style="margin-top:10px;"><span style="background:#f4f9c8;color:#5c6b0e;'
+        f'font-size:11px;font-weight:600;border-radius:999px;padding:3px 10px;">{sub}</span></div>'
+        if sub else ""
+    )
+    return f"""<div style="background:#ffffff;border:1px solid #e6e6e0;border-radius:16px;
+        padding:18px 22px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div style="color:#1c1c1a;font-size:13px;font-weight:600;">{label}</div>{en_html}
+        </div>
+        <div style="color:#1c1c1a;font-family:Georgia,'Noto Serif SC',serif;
+            font-size:30px;font-weight:700;line-height:1.25;margin-top:6px;">{value}</div>{sub_html}
     </div>"""
 
 # ── 侧边栏：看板选择 + 密码 ──
@@ -386,22 +434,26 @@ def latest_data_month(frame):
 
 
 def freshness_badge(source, updated_text, covered_text=None):
-    """顶部数据新鲜度徽章：区分实时 / 缓存，并标注更新时间与数据覆盖月份。"""
+    """顶部数据新鲜度徽章：LIVE 风格胶囊，区分实时 / 缓存，标注抓取时间与覆盖月份。"""
     if source == "live":
-        dot, color, bg, border, label = "🟢", "#15803d", "#f0fdf4", "#86efac", "实时数据"
+        dot, pill_bg, pill_fg, label = "#a4c400", "#f4f9c8", "#5c6b0e", "LIVE 实时"
     else:
-        dot, color, bg, border, label = "🟠", "#b45309", "#fffbeb", "#fcd34d", "缓存数据"
+        dot, pill_bg, pill_fg, label = "#d97706", "#fdf0d5", "#92400e", "CACHE 缓存"
     covered = (
-        f'<span style="color:#6b7280;">｜</span>'
-        f'<span>数据覆盖月份：<b>截止 {covered_text}</b></span>'
+        f'<span style="color:#c9c9c2;">｜</span>'
+        f'<span style="color:#6f6f68;">数据覆盖月份：<b style="color:#1c1c1a;">截止 {covered_text}</b></span>'
         if covered_text else ""
     )
-    return f"""<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-        background:{bg};border:1px solid {border};border-radius:10px;
-        padding:10px 16px;margin-bottom:16px;font-size:13px;color:{color};">
-        <span style="font-weight:600;">{dot} {label}</span>
-        <span style="color:#6b7280;">｜</span>
-        <span>数据抓取时间：<b>{updated_text}</b></span>
+    return f"""<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+        background:#ffffff;border:1px solid #e6e6e0;border-radius:999px;
+        padding:8px 18px;margin-bottom:16px;font-size:13px;">
+        <span style="display:inline-flex;align-items:center;gap:7px;background:{pill_bg};
+            color:{pill_fg};font-weight:700;font-size:11px;letter-spacing:.08em;
+            border-radius:999px;padding:4px 12px;">
+            <span style="width:7px;height:7px;border-radius:50%;background:{dot};display:inline-block;"></span>
+            {label}
+        </span>
+        <span style="color:#6f6f68;">数据抓取时间：<b style="color:#1c1c1a;">{updated_text}</b></span>
         {covered}
     </div>"""
 
@@ -480,9 +532,13 @@ if selected_board == "看板1：预算进度":
         return f"{v/10000:.1f}万"
 
     st.markdown(f"""
-    <div style="padding:8px 0 20px 0;border-bottom:1px solid #eef0f4;margin-bottom:24px;">
-        <h2 style="margin:0;color:#111827;font-weight:700;">📊 {year}年度 常规预算执行进度</h2>
-        <p style="margin:4px 0 0 0;color:#6b7280;font-size:14px;">
+    <div style="padding:4px 0 20px 0;margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <span style="width:22px;height:22px;border-radius:7px;background:#dcef4e;display:inline-block;"></span>
+            <h2 style="margin:0;color:#1c1c1a;font-weight:700;font-size:26px;letter-spacing:-.01em;">{year}年度 常规预算执行进度</h2>
+            <span style="font-size:11px;letter-spacing:.14em;color:#9a9a92;font-weight:600;">BUDGET · PROGRESS</span>
+        </div>
+        <p style="margin:8px 0 0 34px;color:#6f6f68;font-size:13px;">
             统计区间：{year}年 1月 — 12月 ｜ 单位：万元 ｜ 数据截至：{MONTHS[passed_months-1] if passed_months > 0 else "暂无"}
         </p>
     </div>
@@ -613,9 +669,13 @@ if selected_board == "看板1：预算进度":
 # ══════════════════════════════════════
 else:
     st.markdown(f"""
-    <div style="padding:8px 0 16px 0;border-bottom:1px solid #eef0f4;margin-bottom:16px;">
-        <h2 style="margin:0;color:#111827;font-weight:700;">📊 新媒体年度数据看板</h2>
-        <p style="margin:4px 0 0 0;color:#6b7280;font-size:14px;">
+    <div style="padding:4px 0 16px 0;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <span style="width:22px;height:22px;border-radius:7px;background:#dcef4e;display:inline-block;"></span>
+            <h2 style="margin:0;color:#1c1c1a;font-weight:700;font-size:26px;letter-spacing:-.01em;">新媒体年度数据看板</h2>
+            <span style="font-size:11px;letter-spacing:.14em;color:#9a9a92;font-weight:600;">ANALYTICS · OVERVIEW</span>
+        </div>
+        <p style="margin:8px 0 0 34px;color:#6f6f68;font-size:13px;">
             城市：{'、'.join(sel_cities) if sel_cities else '未选择'} ·
             年份：{'、'.join(sel_years) if sel_years else '未选择'} ·
             {'、'.join(sel_months) if sel_months else '全部月份'} ·
@@ -664,7 +724,7 @@ else:
     st.divider()
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🏙️ 分城市", "📅 年度对比", "📈 趋势分析", "📡 分渠道", "📋 数据明细"
+        "分城市", "年度对比", "趋势分析", "分渠道", "数据明细"
     ])
 
     with tab1:
