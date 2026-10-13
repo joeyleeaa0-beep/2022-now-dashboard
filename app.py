@@ -169,9 +169,31 @@ def make_chart(fig):
     fig.update_layout(**PLOTLY_LAYOUT)
     return fig
 
-def _to_excel_bytes(df):
+def _to_excel_bytes(df, sheet_name="数据"):
+    """导出为格式化 Excel：表头样式、自适应列宽、数字千分位。"""
     buf = BytesIO()
-    df.to_excel(buf, index=False, engine="xlsxwriter")
+    with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+        wb = writer.book
+        ws = writer.sheets[sheet_name]
+        header_fmt = wb.add_format({
+            "bold": True, "bg_color": "#f3f4f6", "border": 1,
+            "border_color": "#e5e7eb", "align": "center", "valign": "vcenter",
+        })
+        num_fmt = wb.add_format({"num_format": "#,##0.00", "border": 1, "border_color": "#f3f4f6"})
+        int_fmt = wb.add_format({"num_format": "#,##0", "border": 1, "border_color": "#f3f4f6"})
+        for col_idx, col_name in enumerate(df.columns):
+            ws.write(0, col_idx, col_name, header_fmt)
+            # 列宽：中文按 2 计，据表头与内容估算
+            max_len = len(str(col_name)) * 2
+            for v in df[col_name].head(200):
+                max_len = max(max_len, len(str(v)))
+            ws.set_column(col_idx, col_idx, min(max(max_len + 2, 9), 28))
+            # 数字列加千分位格式
+            if pd.api.types.is_integer_dtype(df[col_name]):
+                ws.set_column(col_idx, col_idx, min(max(max_len + 2, 9), 28), int_fmt)
+            elif pd.api.types.is_float_dtype(df[col_name]):
+                ws.set_column(col_idx, col_idx, min(max(max_len + 2, 9), 28), num_fmt)
     buf.seek(0)
     return buf
 
@@ -345,13 +367,55 @@ display_updated_at = (
     data_updated_at.replace("T", " ")[:19] if data_updated_at else "未知时间"
 )
 
+
+def freshness_badge(source, updated_text):
+    """顶部数据新鲜度徽章：区分实时 / 缓存，并标注更新时间。"""
+    if source == "live":
+        dot, color, bg, border, label = "🟢", "#15803d", "#f0fdf4", "#86efac", "实时数据"
+    else:
+        dot, color, bg, border, label = "🟠", "#b45309", "#fffbeb", "#fcd34d", "缓存数据"
+    return f"""<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+        background:{bg};border:1px solid {border};border-radius:10px;
+        padding:10px 16px;margin-bottom:16px;font-size:13px;color:{color};">
+        <span style="font-weight:600;">{dot} {label}</span>
+        <span style="color:#6b7280;">｜</span>
+        <span>数据时间：<b>{updated_text}</b></span>
+    </div>"""
+
+
 # ── 数据加载完成后再渲染筛选器 ──
 with st.sidebar:
     if selected_board == "看板2：新媒体数据":
         st.markdown("## 筛选条件")
+
+        # 快捷时间范围：一键设置年份 / 月份筛选
+        st.caption("快捷范围")
+        quick = st.radio(
+            "快捷范围", ["全部", "本年度", "去年", "最近3月", "最近6月"],
+            horizontal=True, label_visibility="collapsed", key="quick_range",
+        )
+        _cur_year = str(datetime.datetime.now().year)
+        _cur_month_idx = datetime.datetime.now().month
+        if quick == "本年度":
+            default_years, default_months = [_cur_year], []
+        elif quick == "去年":
+            default_years, default_months = [str(int(_cur_year) - 1)], []
+        elif quick == "最近3月":
+            default_years = sorted({_cur_year} | {str(int(_cur_year) - 1)})
+            _ms = [( _cur_month_idx - i - 1) % 12 + 1 for i in range(3)]
+            default_months = [MONTHS[m - 1] for m in sorted(set(_ms))]
+        elif quick == "最近6月":
+            default_years = sorted({_cur_year} | {str(int(_cur_year) - 1)})
+            _ms = [(_cur_month_idx - i - 1) % 12 + 1 for i in range(6)]
+            default_months = [MONTHS[m - 1] for m in sorted(set(_ms))]
+        else:
+            default_years, default_months = YEARS, []
+        _years_opt = [y for y in YEARS if y in default_years] or YEARS
+        _months_opt = [m for m in MONTHS if m in default_months]
+
         sel_cities = st.multiselect("城市（可多选）", CITIES, default=CITIES)
-        sel_years = st.multiselect("年份（可多选）", YEARS, default=YEARS)
-        sel_months = st.multiselect("月份（可多选）", MONTHS, default=[])
+        sel_years = st.multiselect("年份（可多选）", YEARS, default=_years_opt or YEARS)
+        sel_months = st.multiselect("月份（可多选）", MONTHS, default=_months_opt)
         st.divider()
         df_filtered = apply_filter(df, sel_cities, sel_years, sel_months)
         st.caption(f"当前数据：{len(df_filtered)} 条")
@@ -458,39 +522,43 @@ if selected_board == "看板1：预算进度":
         <div style="font-weight:600;font-size:16px;color:#111827;margin-bottom:20px;">各月花费分布</div>
     """, unsafe_allow_html=True)
 
-    cols = st.columns(12)
     avg_spent = total_spent / passed_months if passed_months > 0 else 0
 
-    for i, (m, v) in enumerate(month_spend_ordered.items()):
-        month_idx = i + 1
-        with cols[i]:
-            if month_idx < current_month_idx:
-                # 已完成月份
-                st.markdown(f"""
-                <div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;
-                    padding:10px 4px;text-align:center;min-height:80px;">
-                    <div style="font-size:13px;font-weight:600;color:#166534;">{m}</div>
-                    <div style="font-size:12px;color:#15803d;margin-top:4px;">{v/10000:.1f}万</div>
-                </div>
-                """, unsafe_allow_html=True)
-            elif month_idx == current_month_idx:
-                # 当前月份
-                st.markdown(f"""
-                <div style="background:white;border:2px solid #f59e0b;border-radius:8px;
-                    padding:10px 4px;text-align:center;min-height:80px;">
-                    <div style="font-size:13px;font-weight:600;color:#92400e;">{m}</div>
-                    <div style="font-size:12px;color:#b45309;margin-top:4px;">—</div>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                # 未来月份
-                st.markdown(f"""
-                <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;
-                    padding:10px 4px;text-align:center;min-height:80px;">
-                    <div style="font-size:13px;color:#9ca3af;">{m}</div>
-                    <div style="font-size:12px;color:#d1d5db;margin-top:4px;">—</div>
-                </div>
-                """, unsafe_allow_html=True)
+    # 响应式月度网格：宽屏 6 列 × 2 行，窄屏自动收窄，避免 12 列挤压。
+    _month_items = list(month_spend_ordered.items())
+    for _r in range(2):
+        _rc = st.columns(6)
+        for _c in range(6):
+            _idx = _r * 6 + _c
+            if _idx >= len(_month_items):
+                continue
+            m, v = _month_items[_idx]
+            month_idx = _idx + 1
+            with _rc[_c]:
+                if month_idx < current_month_idx:
+                    st.markdown(f"""
+                    <div style="background:#dcfce7;border:1px solid #86efac;border-radius:8px;
+                        padding:10px 4px;text-align:center;min-height:76px;margin-bottom:6px;">
+                        <div style="font-size:13px;font-weight:600;color:#166534;">{m}</div>
+                        <div style="font-size:12px;color:#15803d;margin-top:4px;">{v/10000:.1f}万</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif month_idx == current_month_idx:
+                    st.markdown(f"""
+                    <div style="background:white;border:2px solid #f59e0b;border-radius:8px;
+                        padding:10px 4px;text-align:center;min-height:76px;margin-bottom:6px;">
+                        <div style="font-size:13px;font-weight:600;color:#92400e;">{m}</div>
+                        <div style="font-size:12px;color:#b45309;margin-top:4px;">—</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;
+                        padding:10px 4px;text-align:center;min-height:76px;margin-bottom:6px;">
+                        <div style="font-size:13px;color:#9ca3af;">{m}</div>
+                        <div style="font-size:12px;color:#d1d5db;margin-top:4px;">—</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
     st.markdown(f"""
     </div>
@@ -522,16 +590,19 @@ if selected_board == "看板1：预算进度":
 # ══════════════════════════════════════
 else:
     st.markdown(f"""
-    <div style="padding:8px 0 20px 0;border-bottom:1px solid #eef0f4;margin-bottom:24px;">
+    <div style="padding:8px 0 16px 0;border-bottom:1px solid #eef0f4;margin-bottom:16px;">
         <h2 style="margin:0;color:#111827;font-weight:700;">📊 新媒体年度数据看板</h2>
         <p style="margin:4px 0 0 0;color:#6b7280;font-size:14px;">
             城市：{'、'.join(sel_cities) if sel_cities else '未选择'} ·
             年份：{'、'.join(sel_years) if sel_years else '未选择'} ·
             {'、'.join(sel_months) if sel_months else '全部月份'} ·
-            每次打开看板时更新一次 · 数据时间：{display_updated_at}
+            每次打开看板时更新一次
         </p>
     </div>
     """, unsafe_allow_html=True)
+
+    # 数据新鲜度徽章
+    st.markdown(freshness_badge(data_source, display_updated_at), unsafe_allow_html=True)
 
     total_spend     = df_filtered["总花费"].sum() if "总花费" in df_filtered.columns else 0
     total_keizi     = df_filtered["客资总数"].sum() if "客资总数" in df_filtered.columns else 0
@@ -544,19 +615,23 @@ else:
     daodian_rate    = total_daodian / total_keizi * 100 if total_keizi > 0 else 0
     chengjiao_rate  = total_chengjiao / total_keizi * 100 if total_keizi > 0 else 0
 
+    # ── 核心指标（首屏 4 个）──
     c1,c2,c3,c4 = st.columns(4)
     c1.markdown(metric_html("总花费", f"¥{total_spend:,.0f}"), unsafe_allow_html=True)
     c2.markdown(metric_html("总客资量", f"{int(total_keizi):,}"), unsafe_allow_html=True)
-    c3.markdown(metric_html("到店总量", f"{int(total_daodian):,}"), unsafe_allow_html=True)
-    c4.markdown(metric_html("总成交量", f"{int(total_chengjiao):,}"), unsafe_allow_html=True)
-    c5,c6,c7,c8 = st.columns(4)
-    c5.markdown(metric_html("销售成交", f"{int(total_xiaoshou):,}"), unsafe_allow_html=True)
-    c6.markdown(metric_html("收购成交", f"{int(total_shougou):,}"), unsafe_allow_html=True)
-    c7.markdown(metric_html("客资成本", f"¥{keizi_cost:.2f}"), unsafe_allow_html=True)
-    c8.markdown(metric_html("成交成本", f"¥{chengjiao_cost:.2f}"), unsafe_allow_html=True)
-    c9,c10,_,_ = st.columns(4)
-    c9.markdown(metric_html("到店率", f"{daodian_rate:.2f}%"), unsafe_allow_html=True)
-    c10.markdown(metric_html("成交率", f"{chengjiao_rate:.2f}%"), unsafe_allow_html=True)
+    c3.markdown(metric_html("总成交量", f"{int(total_chengjiao):,}"), unsafe_allow_html=True)
+    c4.markdown(metric_html("成交成本", f"¥{chengjiao_cost:.2f}"), unsafe_allow_html=True)
+
+    # ── 更多指标（折叠区，6 个）──
+    with st.expander("📂 更多指标（到店 / 客资成本 / 成交结构 / 转化率）", expanded=False):
+        d1,d2,d3 = st.columns(3)
+        d1.markdown(metric_html("到店总量", f"{int(total_daodian):,}"), unsafe_allow_html=True)
+        d2.markdown(metric_html("客资成本", f"¥{keizi_cost:.2f}"), unsafe_allow_html=True)
+        d3.markdown(metric_html("到店率", f"{daodian_rate:.2f}%"), unsafe_allow_html=True)
+        d4,d5,d6 = st.columns(3)
+        d4.markdown(metric_html("销售成交", f"{int(total_xiaoshou):,}"), unsafe_allow_html=True)
+        d5.markdown(metric_html("收购成交", f"{int(total_shougou):,}"), unsafe_allow_html=True)
+        d6.markdown(metric_html("成交率", f"{chengjiao_rate:.2f}%"), unsafe_allow_html=True)
 
     st.divider()
 
@@ -592,6 +667,13 @@ else:
                 if col in cg.columns:
                     cg[col] = cg[col].round(2)
             st.dataframe(cg, use_container_width=True, hide_index=True)
+            st.download_button(
+                label="⬇️ 导出分城市汇总 Excel",
+                data=_to_excel_bytes(cg.assign(城市=cg["城市"].astype(str)), sheet_name="分城市"),
+                file_name=f"分城市汇总_{datetime.datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_city",
+            )
             ca,cb = st.columns(2)
             with ca:
                 fig = px.bar(cg,x="城市",y="客资总数",title="各城市客资量",color="城市",
@@ -643,6 +725,13 @@ else:
                 if col in yg.columns:
                     yg[col] = yg[col].round(2)
             st.dataframe(yg, use_container_width=True, hide_index=True)
+            st.download_button(
+                label="⬇️ 导出年度对比 Excel",
+                data=_to_excel_bytes(yg.assign(年份=yg["年份"].astype(str)), sheet_name="年度对比"),
+                file_name=f"年度对比_{datetime.datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="dl_year",
+            )
             ya,yb = st.columns(2)
             with ya:
                 fig = px.bar(yg,x="年份",y="客资总数",title="各年度客资量",color="年份",color_discrete_sequence=COLORS)
@@ -724,16 +813,18 @@ else:
             spend_col = find_col(df_filtered, cols["花费"])
             keizi_col = find_col(df_filtered, cols["客资"])
             deal_col = find_col(df_filtered, cols["成交"])
+            daodian_col = find_col(df_filtered, cols.get("到店", ""))
             花费 = float(df_filtered[spend_col].sum()) if spend_col else 0
             客资 = float(df_filtered[keizi_col].sum()) if keizi_col else 0
             成交 = float(df_filtered[deal_col].sum()) if deal_col else 0
+            到店 = float(df_filtered[daodian_col].sum()) if daodian_col else 0
             客资成本 = round(花费 / 客资, 2) if 客资 > 0 else 0
             成交成本 = round(花费 / 成交, 2) if 成交 > 0 else 0
             成交率 = round(成交 / 客资 * 100, 2) if 客资 > 0 else 0
             if 花费 > 0 or 客资 > 0:
                 rows.append({
                     "渠道": ch, "花费": round(花费, 2), "客资": int(客资),
-                    "客资成本": 客资成本, "成交": int(成交),
+                    "到店量": int(到店), "客资成本": 客资成本, "成交": int(成交),
                     "成交成本": 成交成本, "成交率%": 成交率,
                 })
         if rows:
@@ -757,6 +848,30 @@ else:
                 fig = px.bar(ch_df,x="渠道",y="成交成本",title="各渠道成交成本",
                              color="渠道",color_discrete_sequence=COLORS)
                 st.plotly_chart(make_chart(fig),use_container_width=True)
+
+            # ── 渠道多指标雷达图（各指标归一化到 0-100，便于同轴对比）──
+            # 归一化口径：以所有渠道中的最大值为 100，避免量纲差异（花费上万元 vs 成交个位数）。
+            radar_metrics = ["花费", "客资", "到店量", "成交量"]
+            radar_available = [m for m in radar_metrics if m in ch_df.columns]
+            if len(radar_available) >= 3:
+                radar_df = ch_df[["渠道"] + radar_available].copy()
+                for m in radar_available:
+                    vmax = radar_df[m].max()
+                    radar_df[m] = (radar_df[m] / vmax * 100).round(1) if vmax > 0 else 0
+                rd, re_ = st.columns(2)
+                with rd:
+                    fig = px.line_polar(
+                        radar_df.melt(id_vars="渠道", var_name="指标", value_name="归一值"),
+                        r="归一值", theta="指标", color="渠道", line_close=True,
+                        title="各渠道多指标雷达对比（归一化 0–100）",
+                    )
+                    fig.update_traces(fill="toself", opacity=0.35)
+                    st.plotly_chart(make_chart(fig), use_container_width=True)
+                with re_:
+                    # 同时给出原始值热力表，避免归一化丢失绝对值
+                    show_df = ch_df[["渠道"] + radar_available].copy()
+                    st.caption("雷达图原始数值（未归一化）")
+                    st.dataframe(show_df, use_container_width=True, hide_index=True)
 
         # ── 分渠道 × 分地区 × 分月明细 ──
         # 说明：受「城市 / 年份 / 月份」筛选控制，按所选范围展示各渠道分月数据；
@@ -799,18 +914,23 @@ else:
                             "月份": m,
                             "花费": round(花费, 2),
                             "客资量": int(客资),
-                            "客资成本": round(花费 / 客资, 2) if 客资 > 0 else "—",
+                            "客资成本": round(花费 / 客资, 2) if 客资 > 0 else None,
                             "到店量": int(到店),
-                            "到店率%": round(到店 / 客资 * 100, 2) if 客资 > 0 else "—",
+                            "到店率%": round(到店 / 客资 * 100, 2) if 客资 > 0 else None,
                             "成交量": int(成交),
-                            "客资成交率%": round(成交 / 客资 * 100, 2) if 客资 > 0 else "—",
-                            "成交成本": round(花费 / 成交, 2) if 成交 > 0 else "—",
+                            "客资成交率%": round(成交 / 客资 * 100, 2) if 客资 > 0 else None,
+                            "成交成本": round(花费 / 成交, 2) if 成交 > 0 else None,
                         })
         if ch_rows:
             chm_df = pd.DataFrame(ch_rows)
             chm_df["月份"] = pd.Categorical(chm_df["月份"], categories=MONTHS, ordered=True)
             chm_df["地区"] = pd.Categorical(chm_df["地区"], categories=CITIES, ordered=True)
             chm_df = chm_df.sort_values(["地区", "渠道", "月份"]).reset_index(drop=True)
+            # 比率列整列转为格式化字符串：空值显示「—」，避免混合类型导致渲染/导出失败
+            for _c in ["客资成本", "成交成本"]:
+                chm_df[_c] = chm_df[_c].map(lambda v: f"{v:,.2f}" if pd.notna(v) else "—")
+            for _c in ["到店率%", "客资成交率%"]:
+                chm_df[_c] = chm_df[_c].map(lambda v: f"{v:.2f}%" if pd.notna(v) else "—")
             st.dataframe(chm_df, use_container_width=True, hide_index=True)
             st.download_button(
                 label="⬇️ 导出分渠道分月明细 Excel",
@@ -823,13 +943,12 @@ else:
 
     with tab5:
         st.subheader("数据明细")
-        st.dataframe(df_filtered.dropna(axis=1, how='all'), use_container_width=True)
-        buf = BytesIO()
-        df_filtered.to_excel(buf, index=False, engine='xlsxwriter')
-        buf.seek(0)
+        st.caption(f"当前筛选范围共 {len(df_filtered)} 条记录")
+        _detail = df_filtered.dropna(axis=1, how='all')
+        st.dataframe(_detail, use_container_width=True)
         st.download_button(
-            label="⬇️ 导出 Excel",
-            data=buf,
+            label="⬇️ 导出当前视图 Excel",
+            data=_to_excel_bytes(_detail, sheet_name="数据明细"),
             file_name=f"新媒体数据_{datetime.datetime.now().strftime('%Y%m%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
