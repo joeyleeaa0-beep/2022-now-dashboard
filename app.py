@@ -729,22 +729,25 @@ else:
 
     daodian_cost    = total_spend / total_daodian if total_daodian > 0 else 0
 
-    # ── 指标卡三排布局：花费 / 到店 / 成交 ──
+    # ── 指标卡四排布局：每排铺满整行，不留空位 ──
     r1a,r1b,r1c = st.columns(3)
     r1a.markdown(metric_html("总花费", f"¥{total_spend:,.0f}"), unsafe_allow_html=True)
     r1b.markdown(metric_html("总客资量", f"{int(total_keizi):,}"), unsafe_allow_html=True)
     r1c.markdown(metric_html("客资成本", f"¥{keizi_cost:.2f}"), unsafe_allow_html=True)
 
     r2a,r2b,r2c = st.columns(3)
-    r2a.markdown(metric_html("到店总量", f"{int(total_daodian):,}"), unsafe_allow_html=True)
+    r2a.markdown(metric_html("总到店量", f"{int(total_daodian):,}"), unsafe_allow_html=True)
     r2b.markdown(metric_html("到店成本", f"¥{daodian_cost:.2f}"), unsafe_allow_html=True)
     r2c.markdown(metric_html("客资到店率", f"{daodian_rate:.2f}%"), unsafe_allow_html=True)
 
-    r3a,r3b,r3c,r3d = st.columns(4)
+    r3a,r3b,r3c = st.columns(3)
     r3a.markdown(metric_html("总成交量", f"{int(total_chengjiao):,}"), unsafe_allow_html=True)
-    r3b.markdown(metric_html("销售成交", f"{int(total_xiaoshou):,}"), unsafe_allow_html=True)
-    r3c.markdown(metric_html("收购成交", f"{int(total_shougou):,}"), unsafe_allow_html=True)
-    r3d.markdown(metric_html("客资成交率", f"{chengjiao_rate:.2f}%"), unsafe_allow_html=True)
+    r3b.markdown(metric_html("成交成本", f"¥{chengjiao_cost:.2f}"), unsafe_allow_html=True)
+    r3c.markdown(metric_html("客资成交率", f"{chengjiao_rate:.2f}%"), unsafe_allow_html=True)
+
+    r4a,r4b = st.columns(2)
+    r4a.markdown(metric_html("销售成交", f"{int(total_xiaoshou):,}"), unsafe_allow_html=True)
+    r4b.markdown(metric_html("收购成交", f"{int(total_shougou):,}"), unsafe_allow_html=True)
 
     st.divider()
 
