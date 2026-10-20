@@ -726,6 +726,7 @@ else:
     chengjiao_cost  = total_spend / total_chengjiao if total_chengjiao > 0 else 0
     daodian_rate    = total_daodian / total_keizi * 100 if total_keizi > 0 else 0
     chengjiao_rate  = total_chengjiao / total_keizi * 100 if total_keizi > 0 else 0
+    daodian_chengjiao_rate = total_chengjiao / total_daodian * 100 if total_daodian > 0 else 0
 
     daodian_cost    = total_spend / total_daodian if total_daodian > 0 else 0
 
@@ -745,9 +746,10 @@ else:
     r3b.markdown(metric_html("成交成本", f"¥{chengjiao_cost:.2f}"), unsafe_allow_html=True)
     r3c.markdown(metric_html("客资成交率", f"{chengjiao_rate:.2f}%"), unsafe_allow_html=True)
 
-    r4a,r4b = st.columns(2)
-    r4a.markdown(metric_html("销售成交", f"{int(total_xiaoshou):,}"), unsafe_allow_html=True)
-    r4b.markdown(metric_html("收购成交", f"{int(total_shougou):,}"), unsafe_allow_html=True)
+    r4a,r4b,r4c = st.columns(3)
+    r4a.markdown(metric_html("到店成交率", f"{daodian_chengjiao_rate:.2f}%"), unsafe_allow_html=True)
+    r4b.markdown(metric_html("销售成交", f"{int(total_xiaoshou):,}"), unsafe_allow_html=True)
+    r4c.markdown(metric_html("收购成交", f"{int(total_shougou):,}"), unsafe_allow_html=True)
 
     st.divider()
 
